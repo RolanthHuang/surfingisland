@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
-import { swellAt } from './island.js';
+import { swellAt } from './island.js?v=2.0.1';
 
 export class SurfEffects {
   constructor(scene){

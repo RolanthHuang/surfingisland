@@ -46,8 +46,8 @@ script += 'globalThis.SUNSHORE_CHARACTER_DATA="' + model + '";\n'
 script += strip_imports((root / 'game.js').read_text())
 script = re.sub('</script', r'<\\/script', script, flags=re.I)
 html = (root / 'index.html').read_text()
-html = html.replace('<link rel="stylesheet" href="./style.css">', '<style>\n' + (root / 'style.css').read_text() + '\n</style>')
-html = html.replace('<script type="module" src="./game.js"></script>', '<script type="module">\n' + script + '\n</script>')
+html = re.sub(r'<link rel="stylesheet" href="\./style\.css(?:\?[^"]*)?">', lambda _: '<style>\n' + (root / 'style.css').read_text() + '\n</style>', html)
+html = re.sub(r'<script type="module" src="\./game\.js(?:\?[^"]*)?"></script>', lambda _: '<script type="module">\n' + script + '\n</script>', html)
 license_text = (root / 'assets/character/LICENSE.txt').read_text().replace('--', '—')
 html = '<!-- Character: Grab3D Casual Man (rigged), CC0-1.0.\nhttps://grab3d.com/models/characters/man/\n' + license_text + '\n-->\n' + html
 (root / 'standalone.html').write_text(html)

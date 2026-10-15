@@ -1,8 +1,8 @@
 import * as THREE from './vendor/three.module.min.js';
-import { DetailedCharacter } from './character.js';
-import { SurfEffects } from './surf-effects.js';
-import { SurfAudio } from './surf-audio.js';
-import { LIMIT, ZONES, PALMS, OBSTACLES, TOOLS, SWELL_GLSL, swellAt, ridingHeight, stepSurfer, terrainClass, recommendedTool, makeTerrainTracker, advanceTerrainTracker, clamp, smooth, seeded, terrainHeight, floorAt, isWater, currentAt, windAt, boundaryWeight, makePlayer, stepPlayer, comboKey } from './island.js';
+import { DetailedCharacter } from './character.js?v=2.0.1';
+import { SurfEffects } from './surf-effects.js?v=2.0.1';
+import { SurfAudio } from './surf-audio.js?v=2.0.1';
+import { LIMIT, ZONES, PALMS, OBSTACLES, TOOLS, SWELL_GLSL, swellAt, ridingHeight, stepSurfer, terrainClass, recommendedTool, makeTerrainTracker, advanceTerrainTracker, clamp, smooth, seeded, terrainHeight, floorAt, isWater, currentAt, windAt, boundaryWeight, makePlayer, stepPlayer, comboKey } from './island.js?v=2.0.1';
 
 const $ = id => document.getElementById(id);
 const canvas = $('world');
@@ -424,7 +424,7 @@ function updateHUD(){
   speedHistory.shift();speedHistory.push(player.speed);$('speedPath').setAttribute('d',speedHistory.map((s,i)=>`${i?'L':'M'}${(i/(speedHistory.length-1)*90).toFixed(1)} ${(33-Math.min(s/24,1)*29).toFixed(1)}`).join(''));
   if(lastSurface!==player.water&&started){if(player.tool!=='surfboard')toast(player.water?'踏上水面 · 水流現在會影響跑動速度':'回到沙灘 · 感受風的推力');lastSurface=player.water;}
   $('comboCount').textContent=discovered.size;
-  canvas.dataset.diagnostics=JSON.stringify({version:'2.0.0',character:'detailed',heading:+player.facing.toFixed(3),cameraYaw:+cameraYaw.toFixed(3),drawerOpen,cleanView,photoMode,surfing:player.tool==='surfboard'&&player.water,carve:+(player.carve||0).toFixed(3),energy:+(player.energy??1).toFixed(2),wave:+swellAt(player.x,player.z,env.time,env.weather).height.toFixed(3),wake:surfEffects.stats.wake,spray:surfEffects.stats.spray,characterReady:detailedCharacter.ready,characterStats:detailedCharacter.stats,inspecting,x:+player.x.toFixed(3),z:+player.z.toFixed(3),y:+player.y.toFixed(3),speed:+player.speed.toFixed(2),grounded:player.grounded,collision:player.collision,surface:player.water?'water':'sand',terrain:terrainClass(player.x,player.z),tool:player.tool,base:player.base,weather:env.weather,reversed:env.reversed,combos:discovered.size,paused,overview,boundary:+boundaryWeight(player.x,player.z).q.toFixed(4),fps:Math.round(1000/frameMean),calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
+  canvas.dataset.diagnostics=JSON.stringify({version:'2.0.1',character:'detailed',heading:+player.facing.toFixed(3),cameraYaw:+cameraYaw.toFixed(3),drawerOpen,cleanView,photoMode,surfing:player.tool==='surfboard'&&player.water,carve:+(player.carve||0).toFixed(3),energy:+(player.energy??1).toFixed(2),wave:+swellAt(player.x,player.z,env.time,env.weather).height.toFixed(3),wake:surfEffects.stats.wake,spray:surfEffects.stats.spray,characterReady:detailedCharacter.ready,characterStats:detailedCharacter.stats,inspecting,x:+player.x.toFixed(3),z:+player.z.toFixed(3),y:+player.y.toFixed(3),speed:+player.speed.toFixed(2),grounded:player.grounded,collision:player.collision,surface:player.water?'water':'sand',terrain:terrainClass(player.x,player.z),tool:player.tool,base:player.base,weather:env.weather,reversed:env.reversed,combos:discovered.size,paused,overview,boundary:+boundaryWeight(player.x,player.z).q.toFixed(4),fps:Math.round(1000/frameMean),calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
   drawMap();
 }
 const windRelations=[['with','順風'],['cross','側風'],['against','逆風']],currentRelations=[['with','順流'],['cross','側流'],['against','逆流']];
@@ -530,5 +530,5 @@ applyToolVisuals();animateAvatar(0);updateHUD();updateCamera(.1);requestAnimatio
 // Read-only diagnostics for meaningful verification. No test action is enabled on the Site.
 window.sunshore=Object.freeze({
   snapshot:()=>({position:{x:player.x,y:player.y,z:player.z},speed:player.speed,surface:player.water?'water':'sand',grounded:player.grounded,collision:player.collision,weather:env.weather,windAngle:env.windAngle,reversed:env.reversed,boundary:boundaryWeight(player.x,player.z),combos:discovered.size,paused,overview,render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()},fpsEstimate:Math.round(1000/frameMean)}),
-  version:'2.0.0'
+  version:'2.0.1'
 });
