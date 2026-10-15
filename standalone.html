@@ -6209,7 +6209,7 @@ class DetailedCharacter {
   async load(progress) {
     const loader=new GLTFLoader();
     const data=globalThis.SUNSHORE_CHARACTER_DATA;
-    const gltf=data?await loader.parseAsync(Uint8Array.from(atob(data),c=>c.charCodeAt(0)).buffer,''):await loader.loadAsync('./assets/character/runner.glb',e=>progress?.(e.total?e.loaded/e.total:0));
+    const gltf=data?await loader.parseAsync(Uint8Array.from(atob(data),c=>c.charCodeAt(0)).buffer,''):await loader.loadAsync('./assets/character/runner.glb',e=>progress?.(e.total?Math.min(1,e.loaded/e.total):0));
     // Normalize in model space before attaching to the moving player.
     this.model=gltf.scene;
     const textureIds=new Set();
