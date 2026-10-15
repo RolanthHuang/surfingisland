@@ -18,7 +18,7 @@
       <button id="sunny" class="weather active" aria-pressed="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><span>晴天</span></button>
       <button id="windy" class="weather" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h6a2 2 0 1 1-2 2"/></svg><span>刮大風</span></button>
     </div>
-    <div class="top-actions"><button id="toolButton" class="icon-button glass" aria-label="選擇移動工具，目前徒步" title="選擇工具（E）"><svg viewBox="0 0 24 24"><path d="m14 4 6 6-9 9-6-6zM5 13l-2 7 7-2M14 4l3-1 4 4-1 3"/></svg></button><button id="environmentToggle" class="icon-button glass" aria-label="風與水流設定" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M9 4v6m6 4v6"/></svg></button><button id="helpButton" class="icon-button glass" aria-label="操作說明">?</button><button id="pauseButton" class="icon-button glass" aria-label="暫停"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button></div>
+    <div class="top-actions"><button id="characterButton" class="icon-button glass" aria-label="近看人物細節" title="人物細節（C）" aria-pressed="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3.2"/><path d="M5 21v-3a7 7 0 0 1 14 0v3M5 4H2v4m17-4h3v4M2 17v4h3m14 0h3v-4"/></svg></button><button id="toolButton" class="icon-button glass" aria-label="選擇移動工具，目前徒步" title="選擇工具（E）"><svg viewBox="0 0 24 24"><path d="m14 4 6 6-9 9-6-6zM5 13l-2 7 7-2M14 4l3-1 4 4-1 3"/></svg></button><button id="environmentToggle" class="icon-button glass" aria-label="風與水流設定" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M9 4v6m6 4v6"/></svg></button><button id="helpButton" class="icon-button glass" aria-label="操作說明">?</button><button id="pauseButton" class="icon-button glass" aria-label="暫停"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button></div>
   </header>
   <aside class="environment glass" id="environment" aria-label="風向與水流控制">
     <div class="panel-heading"><span class="eyebrow">ISLAND CONDITIONS</span><span class="live-dot">即時環境</span></div>
@@ -54,7 +54,7 @@
     </section>
   </footer>
   <div class="touch-controls"><div id="joystick" class="joystick" aria-label="觸控移動搖桿"><div id="joystickKnob"></div></div><div class="touch-actions"><button id="touchSprint" aria-pressed="false">衝刺</button><button id="touchJump" aria-label="跳躍">↥</button></div></div>
-  <dialog id="helpDialog" class="dialog glass"><button class="dialog-close" data-close="helpDialog" aria-label="關閉操作說明">×</button><span class="eyebrow">FIND YOUR FLOW</span><h2>小島怎麼玩</h2><p>用方向改變速度，用跳躍越過漂流木。<br>主角會直接在水面奔跑，靠近岸邊就會切換地形。</p><div class="help-grid"><span><kbd>W A S D</kbd> 或方向鍵</span><b>移動</b><span><kbd>Shift</kbd></span><b>持續衝刺</b><span><kbd>Space</kbd></span><b>跳過低障礙</b><span>拖曳畫面 / 滾輪</span><b>轉動 / 拉近視角</b><span><kbd>E</kbd></span><b>選擇移動工具</b><span><kbd>R</kbd> / <kbd>Esc</kbd></span><b>回到沙灘 / 暫停</b></div><p class="help-note">手機使用左側搖桿移動、右側按鈕衝刺與跳躍，拖曳空白處調整視角。地形切換時可選擇衝浪板、水上摩托車或外骨骼，也能按 E 隨時換裝。水上摩托車可跨低漂流木，外骨骼可跨 1.05 m 以下障礙；高礁石仍需繞行。</p><button class="primary-button" data-close="helpDialog">出發吧 ↗</button></dialog>
+  <dialog id="helpDialog" class="dialog glass"><button class="dialog-close" data-close="helpDialog" aria-label="關閉操作說明">×</button><span class="eyebrow">FIND YOUR FLOW</span><h2>小島怎麼玩</h2><p>用方向改變速度，用跳躍越過漂流木。<br>主角會直接在水面奔跑，靠近岸邊就會切換地形。</p><div class="help-grid"><span><kbd>W A S D</kbd> 或方向鍵</span><b>移動</b><span><kbd>Shift</kbd></span><b>持續衝刺</b><span><kbd>Space</kbd></span><b>跳過低障礙</b><span>拖曳畫面 / 滾輪</span><b>轉動 / 拉近視角</b><span><kbd>E</kbd> / <kbd>C</kbd></span><b>選擇工具 / 近看人物</b><span><kbd>R</kbd> / <kbd>Esc</kbd></span><b>回到沙灘 / 暫停</b></div><p class="help-note">手機使用左側搖桿移動、右側按鈕衝刺與跳躍，拖曳空白處調整視角。地形切換時可選擇衝浪板、水上摩托車或外骨骼，也能按 E 隨時換裝。水上摩托車可跨低漂流木，外骨骼可跨 1.05 m 以下障礙；高礁石仍需繞行。</p><button class="primary-button" data-close="helpDialog">出發吧 ↗</button></dialog>
   <dialog id="pauseDialog" class="dialog glass small-dialog"><span class="eyebrow">TAKE A BREATH</span><h2>在海邊，慢一點。</h2><p>小島正在等你。</p><button id="resumeButton" class="primary-button">繼續探索 ↗</button><button id="resetButton" class="text-button">回到南岸起點</button></dialog>
   <dialog id="discoveryDialog" class="dialog glass discovery-dialog"><button class="dialog-close" data-close="discoveryDialog" aria-label="關閉環境組合">×</button><span class="eyebrow">THE WAY THE ISLAND MOVES</span><h2>收集不同的跑法</h2><p>持續跑動半秒，即記下當下組合。<br>在晴天和大風中轉向，體驗順風、側風與逆風；水面再搭配三種流向。</p><div id="comboGrid"></div><div class="combo-legend"><span>● 已體驗</span><span>○ 尚未體驗</span></div></dialog>
   <dialog id="equipmentDialog" class="dialog glass equipment-dialog" aria-labelledby="equipmentTitle">
@@ -89,6 +89,13 @@
     <div class="equipment-footer"><button id="keepTool" class="primary-button">繼續使用徒步</button><button class="on-foot-button" data-tool="foot" aria-label="改用徒步" aria-pressed="true">改用徒步</button></div>
     <label class="terrain-prompt-option"><input id="terrainPrompts" type="checkbox" checked>地形改變時提醒我 <small>也可以隨時按 E 或點 ◇ 選擇</small></label>
   </dialog>
+  <section id="characterControls" class="character-controls glass" aria-label="人物細節檢視" hidden>
+    <div><span class="eyebrow">UP CLOSE</span><strong>人物細節</strong><small id="characterState">正在載入精緻人物</small></div>
+    <div class="character-views"><button id="faceView">臉部近看</button><button id="bodyView">全身與裝備</button></div>
+    <div class="character-quality" role="group" aria-label="人物精緻度比較"><button id="detailedCharacter" aria-pressed="true">精緻角色</button><button id="classicCharacter" aria-pressed="false">輕量角色</button></div>
+    <p>拖曳旋轉 · 滾輪拉近<br><small>按 E 可看裝備姿勢，按 C 或 Esc 回到遊戲</small></p>
+    <button id="exitCharacter" class="character-return">回到小島 ↗</button>
+  </section>
   <div id="loading" class="loading"><div class="loading-mark">☀</div><span>讓海風準備好…</span><small id="loadingDetail">正在建立逐浪小島</small></div>
   <script type="module" src="./game.js"></script>
 </body>

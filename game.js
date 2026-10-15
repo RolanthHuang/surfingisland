@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
+import { DetailedCharacter } from './character.js';
 import { LIMIT, ZONES, PALMS, OBSTACLES, TOOLS, terrainClass, recommendedTool, makeTerrainTracker, advanceTerrainTracker, clamp, smooth, seeded, terrainHeight, floorAt, isWater, currentAt, windAt, boundaryWeight, makePlayer, stepPlayer, comboKey } from './island.js';
 
 const $ = id => document.getElementById(id);
@@ -17,16 +18,16 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.16;
+renderer.toneMappingExposure = 1.03;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#c5e5df');
 scene.fog = new THREE.Fog('#c5e5df', 90, 255);
-const camera = new THREE.PerspectiveCamera(57, canvas.clientWidth / canvas.clientHeight, .12, 1100);
+const camera = new THREE.PerspectiveCamera(53, canvas.clientWidth / canvas.clientHeight, .12, 1100);
 const skyColor = new THREE.Color('#c5e5df');
 const hemisphere = new THREE.HemisphereLight('#ecf5ed', '#92a782', 2.1); scene.add(hemisphere);
 const sun = new THREE.DirectionalLight('#fff0c8', 3.0);
 sun.position.set(-38, 78, -42); scene.add(sun);
-sun.castShadow = true;
+sun.castShadow = true;scene.add(sun.target);
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -75, right: 75, top: 67, bottom: -67, near: 1, far: 180 });
 sun.shadow.normalBias = .045; sun.shadow.bias = -.00025;
@@ -293,7 +294,10 @@ for(const leg of legs){
   const thigh=new THREE.Group();leg.hip.add(thigh);exoParts.push(thigh);box(.10,.37,.14,steel,leg.side*.11,-.18,.025,thigh);sphere(.10,exoGlow,leg.side*.11,-.37,.025,thigh);
   const shin=new THREE.Group();leg.knee.add(shin);exoParts.push(shin);box(.10,.29,.12,steel,leg.side*.10,-.18,.02,shin);box(.22,.055,.35,steel,0,-.45,-.055,shin);
 }
-function applyToolVisuals(){surfRig.visible=player.tool==='surfboard';jetRig.visible=player.tool==='jetski';for(const p of exoParts)p.visible=player.tool==='exoskeleton';}
+function applyToolVisuals(){surfRig.visible=player.tool==='surfboard';jetRig.visible=player.tool==='jetski';for(const p of exoParts)p.visible=player.tool==='exoskeleton';detailedCharacter.setTool(player.tool);}
+const detailedCharacter=new DetailedCharacter(avatar,renderer);
+let characterSettled=false,classicCharacter=false;
+detailedCharacter.load(progress=>{const label=$('loadingDetail');if(label)label.textContent=progress>0?`人物載入 ${Math.round(progress*100)}%`:'正在整理人物與衣料細節';}).then(()=>{characterSettled=true;bodyPivot.visible=classicCharacter;$('characterState').textContent='完整人物與材質已就緒';}).catch(error=>{characterSettled=true;classicCharacter=true;bodyPivot.visible=true;$('characterState').textContent='精緻人物未載入，暫用輕量版';console.error('Detailed character load failed:',error);});
 
 // Reusable rings and grains leave a trail without allocating objects each frame.
 const particleCount=80,particles=Array.from({length:particleCount},()=>({life:0}));let particleCursor=0,particleTimer=0;
@@ -311,7 +315,8 @@ function updateParticles(dt){
 
 let player=makePlayer();player.facing=0;
 const env={weather:'sunny',windAngle:Math.PI/4,reversed:false,time:0};
-let weatherBlend=0,started=false,paused=false,overview=false,cameraYaw=.15,cameraPitch=.36,cameraDistance=12.7;
+let weatherBlend=0,started=false,paused=false,overview=false,cameraYaw=.15,cameraPitch=.23,cameraDistance=6.8;
+let inspecting=false,inspectDistance=4.6,savedCamera=null,lastShadowSpan=75;
 let visibleYaw=0,walkTime=0,jumpQueued=false,sprintToggle=false,touchX=0,touchZ=0;
 const keys=new Set(),discovered=new Set();let comboCandidate=null,comboDwell=0,toastTimer=0,hudTime=0,lastSurface=false;
 const terrainTracker=makeTerrainTracker(terrainClass(player.x,player.z));
@@ -333,6 +338,21 @@ function setWeather(weather){
   $('weatherNote').textContent=weather==='sunny'?'微風、平緩的浪，適合出發。':'強風與陣風，順逆風的差別更明顯。';
   toast(weather==='sunny'?'晴天 · 微風 1.8 m/s':'大風 · 約 12 m/s，試著順風與逆風跑');canvas.focus({preventScroll:true});
 }
+function selectCharacter(classic){
+  classicCharacter=classic;detailedCharacter.setClassic(classic);bodyPivot.visible=classic||!detailedCharacter.ready;
+  $('detailedCharacter').setAttribute('aria-pressed',String(!classic));$('classicCharacter').setAttribute('aria-pressed',String(classic));
+  $('characterState').textContent=classic?'輕量角色 · 簡約模型':detailedCharacter.ready?'精緻角色 · 完整服裝與骨架':'人物正在載入';canvas.focus({preventScroll:true});
+}
+function toggleInspection(){
+  if(paused)return;inspecting=!inspecting;document.body.classList.toggle('inspecting-character',inspecting);$('characterButton').setAttribute('aria-pressed',String(inspecting));resetKeys();
+  if(inspecting){start();savedCamera={yaw:cameraYaw,pitch:cameraPitch,distance:cameraDistance};overview=false;$('overviewButton').setAttribute('aria-pressed','false');cameraYaw=visibleYaw+Math.PI;cameraPitch=.12;}
+  else if(savedCamera){cameraYaw=savedCamera.yaw;cameraPitch=savedCamera.pitch;cameraDistance=savedCamera.distance;}
+  $('characterControls').hidden=!inspecting;canvas.focus({preventScroll:true});
+}
+$('characterButton').onclick=toggleInspection;$('exitCharacter').onclick=toggleInspection;
+$('detailedCharacter').onclick=()=>selectCharacter(false);$('classicCharacter').onclick=()=>selectCharacter(true);
+$('faceView').onclick=()=>{inspectDistance=1.25;cameraPitch=.05;canvas.focus({preventScroll:true});};
+$('bodyView').onclick=()=>{inspectDistance=4.6;cameraPitch=.12;canvas.focus({preventScroll:true});};
 $('startButton').onclick=start;$('sunny').onclick=()=>setWeather('sunny');$('windy').onclick=()=>setWeather('windy');
 $('windLeft').onclick=()=>{env.windAngle-=Math.PI/4;toast('風向已逆時針轉 45°');canvas.focus({preventScroll:true});};
 $('windRight').onclick=()=>{env.windAngle+=Math.PI/4;toast('風向已順時針轉 45°');canvas.focus({preventScroll:true});};
@@ -340,7 +360,7 @@ $('reverseCurrent').onclick=()=>{env.reversed=!env.reversed;$('reverseCurrent').
 document.querySelectorAll('[data-zone]').forEach(b=>b.onclick=()=>teleport(b.dataset.zone));
 $('environmentToggle').onclick=()=>{const closed=$('environment').classList.toggle('closed');$('environmentToggle').setAttribute('aria-expanded',String(!closed));};
 if(innerWidth<=600){$('environment').classList.add('closed');$('environmentToggle').setAttribute('aria-expanded','false');}
-$('overviewButton').onclick=()=>{overview=!overview;document.body.classList.toggle('overview',overview);$('overviewButton').setAttribute('aria-pressed',String(overview));$('overviewButton').innerHTML=overview?'回到第三人稱 <span>↙</span>':'俯瞰全島 <span>↗</span>';toast(overview?'俯瞰全島 · 移動仍可控制角色':'回到第三人稱視角');canvas.focus({preventScroll:true});};
+$('overviewButton').onclick=()=>{if(inspecting)toggleInspection();overview=!overview;document.body.classList.toggle('overview',overview);$('overviewButton').setAttribute('aria-pressed',String(overview));$('overviewButton').innerHTML=overview?'回到第三人稱 <span>↙</span>':'俯瞰全島 <span>↗</span>';toast(overview?'俯瞰全島 · 移動仍可控制角色':'回到第三人稱視角');canvas.focus({preventScroll:true});};
 function openDialog(id){paused=true;resetKeys();$(id).showModal();}
 function closeDialog(id){$(id).close();paused=false;canvas.focus({preventScroll:true});}
 function openEquipment(automatic=false){
@@ -363,8 +383,10 @@ $('resetButton').onclick=()=>{closeDialog('pauseDialog');teleport('beach');};
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b.dataset.close));
 document.querySelectorAll('dialog').forEach(d=>{d.addEventListener('cancel',()=>{paused=false;resetKeys();});d.addEventListener('click',e=>{if(e.target!==d)return;const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeDialog(d.id);});});
 window.addEventListener('keydown',e=>{
+  if(e.code==='Escape'&&inspecting&&!document.querySelector('dialog[open]')){e.preventDefault();toggleInspection();return;}
   if(e.code==='Escape'){if(!document.querySelector('dialog[open]')){e.preventDefault();openDialog('pauseDialog');}return;}
   if(paused)return;
+  if(e.code==='KeyC'&&!e.repeat){e.preventDefault();toggleInspection();return;}
   if(e.code==='KeyE'&&!e.repeat){e.preventDefault();openEquipment();return;}
   if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight'].includes(e.code)){e.preventDefault();keys.add(e.code);start();}
   if(e.code==='Space'&&!e.repeat)jumpQueued=true;
@@ -374,9 +396,9 @@ window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener(
 document.addEventListener('visibilitychange',()=>{resetKeys();});
 let dragging=false,lastPointerX=0,lastPointerY=0;
 canvas.addEventListener('pointerdown',e=>{if(paused)return;dragging=true;lastPointerX=e.clientX;lastPointerY=e.clientY;canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});});
-canvas.addEventListener('pointermove',e=>{if(!dragging||overview)return;cameraYaw-=(e.clientX-lastPointerX)*.0045;cameraPitch=clamp(cameraPitch+(e.clientY-lastPointerY)*.003,.10,.94);lastPointerX=e.clientX;lastPointerY=e.clientY;});
+canvas.addEventListener('pointermove',e=>{if(!dragging||overview)return;cameraYaw-=(e.clientX-lastPointerX)*.0045;cameraPitch=clamp(cameraPitch+(e.clientY-lastPointerY)*.003,inspecting?-.2:.10,.94);lastPointerX=e.clientX;lastPointerY=e.clientY;});
 canvas.addEventListener('pointerup',()=>dragging=false);canvas.addEventListener('pointercancel',()=>dragging=false);
-canvas.addEventListener('wheel',e=>{e.preventDefault();cameraDistance=clamp(cameraDistance+e.deltaY*.008,5.2,22);},{passive:false});canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{e.preventDefault();if(inspecting)inspectDistance=clamp(inspectDistance+e.deltaY*.004,1.05,4.8);else cameraDistance=clamp(cameraDistance+e.deltaY*.008,3.2,22);},{passive:false});canvas.addEventListener('contextmenu',e=>e.preventDefault());
 const joystick=$('joystick');let stickPointer=null;
 function stickMove(e){if(stickPointer!==e.pointerId)return;const r=joystick.getBoundingClientRect(),dx=e.clientX-r.left-r.width/2,dy=e.clientY-r.top-r.height/2,max=r.width*.34,n=Math.max(1,Math.hypot(dx,dy)/max);touchX=dx/n/max;touchZ=dy/n/max;$('joystickKnob').style.transform=`translate(${dx/n}px,${dy/n}px)`;}
 joystick.addEventListener('pointerdown',e=>{start();stickPointer=e.pointerId;joystick.setPointerCapture(e.pointerId);stickMove(e);});joystick.addEventListener('pointermove',stickMove);
@@ -402,7 +424,7 @@ function updateHUD(){
   speedHistory.shift();speedHistory.push(player.speed);$('speedPath').setAttribute('d',speedHistory.map((s,i)=>`${i?'L':'M'}${(i/(speedHistory.length-1)*90).toFixed(1)} ${(33-Math.min(s/24,1)*29).toFixed(1)}`).join(''));
   if(lastSurface!==player.water&&started){toast(player.water?'踏上水面 · 水流現在會影響跑動速度':'回到沙灘 · 感受風的推力');lastSurface=player.water;}
   $('comboCount').textContent=discovered.size;
-  canvas.dataset.diagnostics=JSON.stringify({version:'1.1.0',x:+player.x.toFixed(3),z:+player.z.toFixed(3),y:+player.y.toFixed(3),speed:+player.speed.toFixed(2),grounded:player.grounded,collision:player.collision,surface:player.water?'water':'sand',terrain:terrainClass(player.x,player.z),tool:player.tool,base:player.base,weather:env.weather,reversed:env.reversed,combos:discovered.size,paused,overview,boundary:+boundaryWeight(player.x,player.z).q.toFixed(4),fps:Math.round(1000/frameMean),calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
+  canvas.dataset.diagnostics=JSON.stringify({version:'1.2.0',character:classicCharacter?'classic':'detailed',characterReady:detailedCharacter.ready,characterStats:detailedCharacter.stats,inspecting,x:+player.x.toFixed(3),z:+player.z.toFixed(3),y:+player.y.toFixed(3),speed:+player.speed.toFixed(2),grounded:player.grounded,collision:player.collision,surface:player.water?'water':'sand',terrain:terrainClass(player.x,player.z),tool:player.tool,base:player.base,weather:env.weather,reversed:env.reversed,combos:discovered.size,paused,overview,boundary:+boundaryWeight(player.x,player.z).q.toFixed(4),fps:Math.round(1000/frameMean),calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
   drawMap();
 }
 const windRelations=[['with','順風'],['cross','側風'],['against','逆風']],currentRelations=[['with','順流'],['cross','側流'],['against','逆流']];
@@ -426,18 +448,19 @@ function drawMap(){const ctx=mapCtx;ctx.clearRect(0,0,500,340);ctx.drawImage(map
 
 const cameraTarget=new THREE.Vector3(),desiredCamera=new THREE.Vector3(),lookTarget=new THREE.Vector3();let cameraReady=false;
 function updateCamera(dt){
-  if(overview){desiredCamera.set(0,133,74);lookTarget.set(0,0,-3);}
+  if(inspecting){const compact=canvas.clientWidth<700,focus=inspectDistance<2?1.57:compact?.45:.75,distance=inspectDistance*(compact&&inspectDistance>=2?1.22:1);desiredCamera.set(player.x+Math.sin(cameraYaw)*distance,player.y+focus+Math.sin(cameraPitch)*distance,player.z+Math.cos(cameraYaw)*distance);lookTarget.set(player.x,player.y+focus,player.z);}
+  else if(overview){desiredCamera.set(0,133,74);lookTarget.set(0,0,-3);}
   else{
     const sin=Math.sin(cameraYaw),cos=Math.cos(cameraYaw),distance=cameraDistance+Math.min(player.speed,14)*.055;
     desiredCamera.set(player.x+sin*distance,player.y+2.2+Math.sin(cameraPitch)*distance,player.z+cos*distance);
     desiredCamera.y=Math.max(desiredCamera.y,floorAt(desiredCamera.x,desiredCamera.z)+1.2);
-    lookTarget.set(player.x-sin*2,player.y+1.15,player.z-cos*2);
+    lookTarget.set(player.x-sin*.8,player.y+1.10,player.z-cos*.8);
     // Shorten the camera arm before it enters a tall solid rock.
     const ray=new THREE.Vector3().subVectors(desiredCamera,lookTarget),len=ray.length();ray.normalize();let safe=len;
     for(const o of OBSTACLES){if(o.type!=='rock')continue;const center=new THREE.Vector3(o.x,o.base+o.h*.5,o.z);const along=new THREE.Vector3().subVectors(center,lookTarget).dot(ray);if(along<.8||along>safe)continue;const closest=lookTarget.clone().addScaledVector(ray,along);const r=o.r+.4;if(closest.distanceTo(center)<r&&closest.y<o.top+.4)safe=Math.max(1.7,along-r);}
     if(safe<len)desiredCamera.copy(lookTarget).addScaledVector(ray,safe);
   }
-  const blend=1-Math.exp(-dt*(overview?3.2:6));if(!cameraReady){camera.position.copy(desiredCamera);cameraTarget.copy(lookTarget);cameraReady=true;}else{camera.position.lerp(desiredCamera,blend);cameraTarget.lerp(lookTarget,blend);}camera.lookAt(cameraTarget);
+  const blend=1-Math.exp(-dt*(overview?3.2:6));if(!cameraReady){camera.position.copy(desiredCamera);cameraTarget.copy(lookTarget);cameraReady=true;}else{camera.position.lerp(desiredCamera,blend);cameraTarget.lerp(lookTarget,blend);}camera.lookAt(cameraTarget);const fov=inspecting?36:53;if(Math.abs(camera.fov-fov)>.01){camera.fov+=(fov-camera.fov)*blend;camera.updateProjectionMatrix();}
 }
 function animateAvatar(dt){
   const moving=Math.min(1,player.speed/3),air=!player.grounded;
@@ -457,6 +480,7 @@ function animateAvatar(dt){
     for(const arm of arms){arm.shoulder.rotation.x=.95;arm.shoulder.rotation.z=-arm.side*.08;arm.elbow.rotation.x=-.6;}
     for(const skid of jetSkids)skid.visible=!player.water;
   }
+  detailedCharacter.update(dt,player,currentInput,env.time);
   contactShadow.position.set(player.x,Math.max(.105,terrainHeight(player.x,player.z)+.025),player.z);contactShadow.scale.setScalar(1+Math.max(0,player.y-floorAt(player.x,player.z))*.25);contactShadow.material.opacity=player.water?.12:.17;
   particleTimer+=dt;if(player.speed>1.4&&player.grounded&&particleTimer>.105){emitParticle(player);particleTimer=0;}updateParticles(dt);
 }
@@ -466,6 +490,7 @@ function frame(now){
   if(!paused){
     env.time+=dt;
     let sx=touchX+(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0),sz=touchZ+(keys.has('KeyS')||keys.has('ArrowDown')?1:0)-(keys.has('KeyW')||keys.has('ArrowUp')?1:0);
+    if(inspecting){sx=0;sz=0;}
     const mag=Math.hypot(sx,sz);if(mag>1){sx/=mag;sz/=mag;}
     const yaw=overview?0:cameraYaw,co=Math.cos(yaw),si=Math.sin(yaw);
     currentInput={x:sx*co+sz*si,z:-sx*si+sz*co,sprint:sprintToggle||keys.has('ShiftLeft')||keys.has('ShiftRight'),jump:jumpQueued};
@@ -486,13 +511,14 @@ function frame(now){
     boat.position.y=.25+Math.sin(env.time*.9)*.09;boat.rotation.z=Math.sin(env.time*.8)*(.025+weatherBlend*.025);
     animateAvatar(dt);
     if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').classList.remove('visible');}
-    const transition=advanceTerrainTracker(terrainTracker,terrainClass(player.x,player.z),dt,env.time,$('terrainPrompts').checked,started&&player.grounded&&!document.querySelector('dialog[open]'));
+    const transition=advanceTerrainTracker(terrainTracker,terrainClass(player.x,player.z),dt,env.time,$('terrainPrompts').checked,started&&!inspecting&&player.grounded&&!document.querySelector('dialog[open]'));
     if(transition)openEquipment(true);
   }
   updateCamera(dt);hudTime+=dt;if(hudTime>.1){updateHUD();hudTime=0;}
+  const span=inspecting?5.5:32;if(span!==lastShadowSpan){Object.assign(sun.shadow.camera,{left:-span,right:span,top:span,bottom:-span});sun.shadow.camera.updateProjectionMatrix();lastShadowSpan=span;}sun.shadow.normalBias=inspecting?.003:.014;sun.target.position.set(player.x,player.y+.8,player.z);sun.position.set(player.x-38,player.y+78,player.z-42);
   renderer.render(scene,camera);
   frameMean=frameMean*.97+Math.min(rawDt*1000,100)*.03;qualityTime+=dt;if(qualityTime>7&&frameMean>31&&renderer.getPixelRatio()>1){renderer.setPixelRatio(1);renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);qualityTime=0;}
-  if(++frameCount===3){$('loading').classList.add('loaded');setTimeout(()=>$('loading').remove(),800);}
+  frameCount++;if(frameCount>=3&&characterSettled&&$('loading')&&!$('loading').classList.contains('loaded')){$('loading').classList.add('loaded');setTimeout(()=>$('loading')?.remove(),800);}
 }
 window.addEventListener('resize',()=>{camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix();renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);});
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();paused=true;toast('3D 畫面暫停，請重新整理以回到小島。');});
@@ -501,5 +527,5 @@ applyToolVisuals();animateAvatar(0);updateHUD();updateCamera(.1);requestAnimatio
 // Read-only diagnostics for meaningful verification. No test action is enabled on the Site.
 window.sunshore=Object.freeze({
   snapshot:()=>({position:{x:player.x,y:player.y,z:player.z},speed:player.speed,surface:player.water?'water':'sand',grounded:player.grounded,collision:player.collision,weather:env.weather,windAngle:env.windAngle,reversed:env.reversed,boundary:boundaryWeight(player.x,player.z),combos:discovered.size,paused,overview,render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()},fpsEstimate:Math.round(1000/frameMean)}),
-  version:'1.1.0'
+  version:'1.2.0'
 });

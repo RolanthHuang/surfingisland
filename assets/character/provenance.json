@@ -1,0 +1,151 @@
+{
+  "slug": "man",
+  "name": {
+    "en": "Casual Man",
+    "de": "Mann in Freizeitkleidung",
+    "es": "Hombre casual"
+  },
+  "summary": "Stylized young man in an olive bomber jacket, cream knit sweater, slim jeans and white sneakers: a versatile everyday character, also rigged.",
+  "category": "characters",
+  "categoryName": "Characters & People",
+  "tier": "high-detail",
+  "style": "stylized",
+  "kit": null,
+  "tags": [
+    "man",
+    "male",
+    "human",
+    "rigged",
+    "character",
+    "npc",
+    "rpg",
+    "stylized"
+  ],
+  "license": "CC0-1.0",
+  "origin": {
+    "method": "ai-assisted",
+    "aiContent": true,
+    "aiAssistedCode": null,
+    "detail": "Base mesh and textures generated with an AI image-to-3D tool (Meshy), then cleaned up, scaled, textured and checked in Blender.",
+    "licenseUrl": "https://grab3d.com/dl/man/LICENSE.txt",
+    "manifestUrl": "https://grab3d.com/dl/man/manifest.json"
+  },
+  "created": "2026-09-28",
+  "specs": {
+    "triangles": 498580,
+    "trianglesLight": 249289,
+    "texturePx": 4096,
+    "texturePxLight": 1024,
+    "maps": [
+      "baseColor",
+      "roughness",
+      "metallic",
+      "normal"
+    ],
+    "dimensionsMeters": [
+      1.152,
+      0.356,
+      1.8
+    ],
+    "movingParts": []
+  },
+  "media": {
+    "thumbnail": "https://grab3d.com/m/man/man-3d-model.webp",
+    "thumbnailSmall": "https://grab3d.com/m/man/thumb-400.webp",
+    "og": "https://grab3d.com/m/man/og.jpg",
+    "previewGlb": "https://grab3d.com/m/man/preview.glb",
+    "turntableWebm": "https://grab3d.com/m/man/turntable.webm",
+    "turntableMp4": "https://grab3d.com/m/man/turntable.mp4"
+  },
+  "files": [
+    {
+      "format": "glb",
+      "variant": "full",
+      "file": "man.glb",
+      "bytes": 20278264,
+      "url": "https://grab3d.com/dl/man/man.glb"
+    },
+    {
+      "format": "fbx",
+      "variant": "full",
+      "file": "man.fbx",
+      "bytes": 33341036,
+      "url": "https://grab3d.com/dl/man/man.fbx"
+    },
+    {
+      "format": "blend",
+      "variant": "full",
+      "file": "man.blend",
+      "bytes": 24794930,
+      "url": "https://grab3d.com/dl/man/man.blend"
+    },
+    {
+      "format": "usdz",
+      "variant": "full",
+      "file": "man.usdz",
+      "bytes": 30692187,
+      "url": "https://grab3d.com/dl/man/man.usdz"
+    },
+    {
+      "format": "obj-zip",
+      "variant": "full",
+      "file": "man-obj.zip",
+      "bytes": 16079649,
+      "url": "https://grab3d.com/dl/man/man-obj.zip"
+    },
+    {
+      "format": "glb",
+      "variant": "light",
+      "file": "man-light.glb",
+      "bytes": 7814452,
+      "url": "https://grab3d.com/dl/man/man-light.glb"
+    },
+    {
+      "format": "fbx",
+      "variant": "light",
+      "file": "man-light.fbx",
+      "bytes": 15375100,
+      "url": "https://grab3d.com/dl/man/man-light.fbx"
+    }
+  ],
+  "rigged": {
+    "animations": [
+      "walk",
+      "run"
+    ],
+    "origin": {
+      "method": "ai-assisted",
+      "aiContent": true,
+      "aiAssistedCode": null,
+      "detail": "Base mesh and textures generated with an AI image-to-3D tool (Meshy), then cleaned up, scaled, textured and checked in Blender. Skeleton, skinning and the walk and run clips were added automatically with Meshy Auto-Rig. Finger bones and a relaxed hand pose were added in Blender.",
+      "licenseUrl": "https://grab3d.com/dl/man-rigged/LICENSE.txt",
+      "manifestUrl": "https://grab3d.com/dl/man-rigged/manifest.json"
+    },
+    "preview": "https://grab3d.com/m/man/rigged.glb",
+    "files": [
+      {
+        "format": "glb",
+        "variant": "full",
+        "file": "man-rigged.glb",
+        "bytes": 13051272,
+        "url": "https://grab3d.com/dl/man-rigged/man-rigged.glb"
+      },
+      {
+        "format": "fbx",
+        "variant": "full",
+        "file": "man-rigged.fbx",
+        "bytes": 19466764,
+        "url": "https://grab3d.com/dl/man-rigged/man-rigged.fbx"
+      },
+      {
+        "format": "blend",
+        "variant": "full",
+        "file": "man-rigged.blend",
+        "bytes": 13035875,
+        "url": "https://grab3d.com/dl/man-rigged/man-rigged.blend"
+      }
+    ]
+  },
+  "relatedVariant": null,
+  "page": "https://grab3d.com/models/characters/man/"
+}
