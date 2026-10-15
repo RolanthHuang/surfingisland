@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eaf1e8">
+  <meta name="description" content="一座小島，二十四種風與流的相遇。自由衝刺於沙灘與水面，探索陽光小島的第三人稱遊戲。">
+  <title>逐浪小島 · Sunshore</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23203f40'/%3E%3Ccircle cx='32' cy='25' r='11' fill='%23e9ca7b'/%3E%3Cpath d='M10 43q11-12 22 0t22 0M10 51q11-12 22 0t22 0' fill='none' stroke='%2394d6c1' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <canvas id="world" aria-label="逐浪小島第三人稱探索場景，可使用 WASD 移動" tabindex="0"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="13" r="6"/><path d="M4 26q8-8 16 0t16 0M4 33q8-8 16 0t16 0"/></svg></div><div><span class="eyebrow">SUNSHORE</span><h1>逐浪小島<span class="edition">自由探索</span></h1></div></div>
+    <div class="weather-switch glass" role="group" aria-label="選擇天氣">
+      <button id="sunny" class="weather active" aria-pressed="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><span>晴天</span></button>
+      <button id="windy" class="weather" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h6a2 2 0 1 1-2 2"/></svg><span>刮大風</span></button>
+    </div>
+    <div class="top-actions"><button id="environmentToggle" class="icon-button glass" aria-label="風與水流設定" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M9 4v6m6 4v6"/></svg></button><button id="helpButton" class="icon-button glass" aria-label="操作說明">?</button><button id="pauseButton" class="icon-button glass" aria-label="暫停"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button></div>
+  </header>
+  <aside class="environment glass" id="environment" aria-label="風向與水流控制">
+    <div class="panel-heading"><span class="eyebrow">ISLAND CONDITIONS</span><span class="live-dot">即時環境</span></div>
+    <div class="condition-row"><div id="windDial" class="direction-dial"><span>N</span><svg viewBox="0 0 36 36"><path d="m18 6 7 21-7-4-7 4z"/></svg></div><div class="condition-text"><span>風向 <small>吹向</small> <b id="windDirection">東北</b></span><strong><span id="windSpeed">1.8</span><small>m/s</small></strong></div><div class="direction-actions"><button id="windLeft" aria-label="風向逆時針轉 45 度">↶</button><button id="windRight" aria-label="風向順時針轉 45 度">↷</button></div></div>
+    <div class="condition-divider"></div>
+    <div class="condition-row"><div id="currentDial" class="direction-dial aqua"><span>N</span><svg viewBox="0 0 36 36"><path d="m18 6 7 21-7-4-7 4z"/></svg></div><div class="condition-text"><span>水流 <small id="currentName">潟湖緩流</small></span><strong><span id="currentSpeed">1.6</span><small>m/s</small></strong></div><button id="reverseCurrent" class="reverse-button" aria-label="反轉全島水流方向" title="反轉全島水流方向">反轉<span>⇄</span></button></div>
+    <div class="environment-foot"><span id="weatherNote">微風、平緩的浪，適合出發。</span></div>
+  </aside>
+  <section class="intro" id="intro">
+    <p class="eyebrow">A LITTLE ISLAND. ENDLESS WAYS TO RUN.</p>
+    <h2>跟著風，<br>跑向海。</h2>
+    <p>從柔軟沙灘，到透亮水面。<br>每一次轉向，都有不一樣的速度。</p>
+    <button id="startButton" class="start-button">開始探索 <span>↗</span></button>
+    <span class="intro-note">自由跑動 · 沒有倒數 · 按 W 也能出發</span>
+  </section>
+  <div id="location" class="location-pill glass"><span class="location-dot"></span><span id="locationName">南岸沙灘</span><small id="surfaceName">沙灘</small></div>
+  <div id="edgeNotice" class="edge-notice" hidden>已接近邊界，向外移動會逐漸減速。<br><small>轉向島內，即可繼續跑動。</small></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <footer class="bottom-hud">
+    <section class="speed-panel glass" aria-label="角色即時速度">
+      <div class="speed-heading"><span class="eyebrow">YOUR PACE</span><span class="running-state" id="runningState">準備出發</span></div>
+      <div class="speed-value"><span id="speed">0.0</span><div><b>m/s</b><small id="paceLabel">沙灘跑動</small></div><svg class="speed-spark" viewBox="0 0 90 36"><path id="speedPath" d="M0 32H90"/></svg></div>
+      <div class="speed-bar"><span id="speedBar"></span></div>
+      <div class="speed-factors"><div><span>地形基速</span><b id="baseEffect">6.0</b></div><div><span>風的影響</span><b id="windEffect">—</b></div><div><span>水流影響</span><b id="currentEffect">—</b></div></div>
+    </section>
+    <div class="controls-hint glass"><div><kbd>W</kbd><span class="arrows-row"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></div><span>移動</span><i></i><kbd>Shift</kbd><span>衝刺</span><i></i><kbd>Space</kbd><span>跳躍</span><i></i><span class="mouse-icon">◉</span><span>拖曳轉視角</span></div>
+    <section class="map-panel glass" aria-label="全島小地圖">
+      <div class="map-top"><span class="eyebrow">ISLAND EXPLORER</span><button id="overviewButton" aria-label="切換俯瞰全島" aria-pressed="false">俯瞰全島 <span>↗</span></button></div>
+      <div class="map-wrap"><canvas id="minimap" width="500" height="340" aria-label="小島地圖，顯示沙灘、水域、障礙物和角色位置"></canvas><span class="map-north">N ↑</span><div class="map-scale"><span></span>20 m</div></div>
+      <div class="zone-buttons" role="group" aria-label="快速前往體驗區"><button data-zone="beach" class="selected">沙灘</button><button data-zone="lagoon">水面</button><button data-zone="obstacles">障礙區</button><button data-zone="current">急流</button></div>
+      <button class="discoveries" id="discoveryButton"><span><i class="discovery-dot"></i>已體驗的環境組合</span><b><span id="comboCount">0</span><small>/ 24</small> ↗</b></button>
+    </section>
+  </footer>
+  <div class="touch-controls"><div id="joystick" class="joystick" aria-label="觸控移動搖桿"><div id="joystickKnob"></div></div><div class="touch-actions"><button id="touchSprint" aria-pressed="false">衝刺</button><button id="touchJump" aria-label="跳躍">↥</button></div></div>
+  <dialog id="helpDialog" class="dialog glass"><button class="dialog-close" data-close="helpDialog" aria-label="關閉操作說明">×</button><span class="eyebrow">FIND YOUR FLOW</span><h2>小島怎麼玩</h2><p>用方向改變速度，用跳躍越過漂流木。<br>主角會直接在水面奔跑，靠近岸邊就會切換地形。</p><div class="help-grid"><span><kbd>W A S D</kbd> 或方向鍵</span><b>移動</b><span><kbd>Shift</kbd></span><b>持續衝刺</b><span><kbd>Space</kbd></span><b>跳過低障礙</b><span>拖曳畫面 / 滾輪</span><b>轉動 / 拉近視角</b><span><kbd>R</kbd> / <kbd>Esc</kbd></span><b>回到沙灘 / 暫停</b></div><p class="help-note">手機使用左側搖桿移動、右側按鈕衝刺與跳躍，拖曳空白處調整視角。高礁石需要繞過；邊界會柔和減速，轉身即可離開。</p><button class="primary-button" data-close="helpDialog">出發吧 ↗</button></dialog>
+  <dialog id="pauseDialog" class="dialog glass small-dialog"><span class="eyebrow">TAKE A BREATH</span><h2>在海邊，慢一點。</h2><p>小島正在等你。</p><button id="resumeButton" class="primary-button">繼續探索 ↗</button><button id="resetButton" class="text-button">回到南岸起點</button></dialog>
+  <dialog id="discoveryDialog" class="dialog glass discovery-dialog"><button class="dialog-close" data-close="discoveryDialog" aria-label="關閉環境組合">×</button><span class="eyebrow">THE WAY THE ISLAND MOVES</span><h2>收集不同的跑法</h2><p>持續跑動半秒，即記下當下組合。<br>在晴天和大風中轉向，體驗順風、側風與逆風；水面再搭配三種流向。</p><div id="comboGrid"></div><div class="combo-legend"><span>● 已體驗</span><span>○ 尚未體驗</span></div></dialog>
+  <div id="loading" class="loading"><div class="loading-mark">☀</div><span>讓海風準備好…</span><small id="loadingDetail">正在建立逐浪小島</small></div>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
