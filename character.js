@@ -6,7 +6,7 @@ import { GLTFLoader } from './vendor/GLTFLoader.js';
 export class DetailedCharacter {
   constructor(parent, renderer) {
     this.parent=parent;this.renderer=renderer;this.root=new THREE.Group();parent.add(this.root);
-    this.ready=false;this.classic=false;this.tool='foot';this.bones={};this.actions={};this.weights={idle:1,walk:0,run:0};
+    this.ready=false;this.tool='foot';this.bones={};this.actions={};this.weights={idle:1,walk:0,run:0};
     this.stats={triangles:0,bones:0,textures:0,animations:[],state:'loading'};
     this.tmpA=new THREE.Vector3();this.tmpB=new THREE.Vector3();this.tmpC=new THREE.Vector3();
     this.armor=new THREE.Group();parent.add(this.armor);this.armor.visible=false;this.armorSegments=[];this.kneeCaps=[];
@@ -65,11 +65,10 @@ export class DetailedCharacter {
     this.scale=1.86/size.y;this.model.scale.multiplyScalar(this.scale);this.model.position.set(-center.x*this.scale,-bounds.min.y*this.scale,-center.z*this.scale);this.root.add(this.model);this.root.rotation.y=Math.PI;
     this.root.updateMatrixWorld(true);this.jointScale=this.bones.Hips.getWorldScale(new THREE.Vector3()).y;
     this.animationPose=Object.values(this.bones).map(bone=>({bone,p:bone.position.clone(),q:bone.quaternion.clone()}));
-    this.stats.animations=['idle','walk','run'];this.stats.state='ready';this.ready=true;this.setClassic(this.classic);
+    this.stats.animations=['idle','walk','run'];this.stats.state='ready';this.ready=true;this.root.visible=true;
     return this.stats;
   }
-  setClassic(value){this.classic=value;this.root.visible=this.ready&&!value;this.armor.visible=this.ready&&!value&&this.tool==='exoskeleton';}
-  setTool(tool){this.tool=tool;this.armor.visible=this.ready&&!this.classic&&tool==='exoskeleton';}
+  setTool(tool){this.tool=tool;this.armor.visible=this.ready&&tool==='exoskeleton';}
   target(x,y,z){return this.parent.localToWorld(new THREE.Vector3(x,y,z));}
   aim(bone,child,target){
     const p=bone.getWorldPosition(new THREE.Vector3()),c=child.getWorldPosition(new THREE.Vector3()),a=c.sub(p).normalize(),b=target.clone().sub(p).normalize();
@@ -84,7 +83,7 @@ export class DetailedCharacter {
     const elbow=s.clone().addScaledVector(dir,a).addScaledVector(bend,h);this.aim(upper,lower,elbow);this.aim(lower,end,target);
   }
   update(dt,player,input,time){
-    if(!this.ready||this.classic)return;
+    if(!this.ready)return;
     // AnimationMixer skips writing unchanged tracks. Restore the last animated pose
     // before applying tool IK again so crouching never accumulates frame by frame.
     for(const pose of this.animationPose){pose.bone.position.copy(pose.p);pose.bone.quaternion.copy(pose.q);}
@@ -92,19 +91,30 @@ export class DetailedCharacter {
     const targets={idle:1-motion,walk:motion-run,run};
     for(const key of Object.keys(this.weights)){this.weights[key]+=(targets[key]-this.weights[key])*(1-Math.exp(-dt*9));this.actions[key].setEffectiveWeight(this.weights[key]);}
     this.actions.walk.setEffectiveTimeScale(THREE.MathUtils.clamp(player.speed/2.4,.7,2));this.actions.run.setEffectiveTimeScale(THREE.MathUtils.clamp(player.speed/6.5,.7,1.85));
-    this.mixer.update(dt);for(const pose of this.animationPose){pose.p.copy(pose.bone.position);pose.q.copy(pose.bone.quaternion);}this.root.position.y=0;
-    if(glide){
-      const crouch=player.tool==='jetski'?.19:.055;this.bones.Hips.position.y-=crouch/this.jointScale;this.root.position.y=player.tool==='surfboard'?.21:.10;
-      this.bones.Spine02.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),.06));this.root.updateMatrixWorld(true);
+    this.mixer.update(dt);for(const pose of this.animationPose){pose.p.copy(pose.bone.position);pose.q.copy(pose.bone.quaternion);}this.root.position.y=0;this.root.rotation.y=Math.PI;
+    if(player.tool==='surfboard'){
+      const pump=player.pump||0,carve=player.carve||0,crouch=.38+pump*.13+Math.abs(carve)*.06;
+      this.root.rotation.y=Math.PI+1.02;this.root.position.y=.21;
+      this.bones.Hips.position.y-=crouch/this.jointScale;
+      this.bones.Spine02.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(.12+pump*.12,-.28,carve*.10)));
+      this.bones.Head.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),-.62));
+      this.root.updateMatrixWorld(true);
+      this.limb('LeftUpLeg','LeftLeg','LeftFoot',this.target(-.07,.30,-.47),this.target(-.58,.56,-.37));
+      this.limb('RightUpLeg','RightLeg','RightFoot',this.target(.08,.30,.43),this.target(-.45,.55,.5));
+      this.limb('LeftArm','LeftForeArm','LeftHand',this.target(-.58-carve*.12,1.04-pump*.12,-.48),this.target(-.8,1.15,-.12));
+      this.limb('RightArm','RightForeArm','RightHand',this.target(.53-carve*.12,.98-pump*.12,.43),this.target(.78,1.2,.22));
+      this.stats.pose=Math.abs(carve)>.2?'carving':pump>.2?'tucked':'surf-stance';
+    }else if(player.tool==='jetski'){
+      this.bones.Hips.position.y-=.19/this.jointScale;this.root.position.y=.10;this.root.updateMatrixWorld(true);
       for(const [side,sign]of [['Left',-1],['Right',1]]){
-        const jet=player.tool==='jetski';
-        this.limb(side+'UpLeg',side+'Leg',side+'Foot',this.target(sign*(jet?.28:.20),jet?.36:.25,jet?.20:sign*.27),this.target(sign*.38,.65,-.65));
-        this.limb(side+'Arm',side+'ForeArm',side+'Hand',this.target(sign*(jet?.34:.53),jet?1.03:1.22,jet?-.45:sign*.03),this.target(sign*.55,1.08,.30));
+        this.limb(side+'UpLeg',side+'Leg',side+'Foot',this.target(sign*.28,.36,.20),this.target(sign*.38,.65,-.65));
+        this.limb(side+'Arm',side+'ForeArm',side+'Hand',this.target(sign*.34,1.03,-.45),this.target(sign*.55,1.08,.30));
       }
+      this.stats.pose='seated';
     }else if(!player.grounded){
       this.root.updateMatrixWorld(true);
       for(const [side,sign]of [['Left',-1],['Right',1]])this.limb(side+'UpLeg',side+'Leg',side+'Foot',this.target(sign*.18,.30,sign*.17),this.target(sign*.25,.7,-.6));
-    }
+    }else this.stats.pose=player.speed>3?'running':'standing';
     this.root.updateMatrixWorld(true);
     if(this.armor.visible){
       for(const item of this.armorSegments){const a=this.parent.worldToLocal(this.bones[item.a].getWorldPosition(new THREE.Vector3())),b=this.parent.worldToLocal(this.bones[item.b].getWorldPosition(new THREE.Vector3()));a.x+=item.offset;b.x+=item.offset;const d=b.clone().sub(a);item.mesh.position.copy(a).add(b).multiplyScalar(.5);item.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.clone().normalize());item.mesh.scale.y=d.length();}

@@ -1,4 +1,4 @@
-export const LIMIT = { x: 80, z: 64, soft: .85 };
+export const LIMIT = { x: 180, z: 144, soft: .85 };
 export const WEATHER = { sunny: { speed: 1.8, label: '晴天' }, windy: { speed: 12, label: '刮大風' } };
 export const TOOLS = {
   foot: { name: '徒步', sand: [6, 10], water: [5.4, 9], wind: .25, currentWith: 1, currentAgainst: 1, drift: .12, step: 0, jump: 7.2, verb: '跑動' },
@@ -7,6 +7,7 @@ export const TOOLS = {
   exoskeleton: { name: '外骨骼助行器', sand: [9, 14], water: [7.6, 11.6], wind: .18, currentWith: .65, currentAgainst: .65, drift: .055, step: 1.05, jump: 8.4, verb: '助行' }
 };
 export const ZONES = {
+  surf: { x: 54, z: 55, label: '南灣浪線', yaw: -.95 },
   beach: { x: -9, z: 25, label: '南岸沙灘', yaw: .15 },
   lagoon: { x: 9, z: -3, label: '透光潟湖', yaw: -.55 },
   obstacles: { x: 21, z: 20, label: '漂流木障礙區', yaw: -.45 },
@@ -21,7 +22,7 @@ export function coastRadius(x, z) {
 }
 export function terrainHeight(x, z) {
   const q = coastRadius(x, z);
-  let h = clamp((1 - q) * 10, -3.7, 1.25);
+  let h = clamp((1 - q) * 10, -14, 1.25);
   h += 1.65 * Math.exp(-((x + 23) ** 2 / 220 + (z + 7) ** 2 / 290)) * smooth((1 - q) * 5);
   h += (.10 * Math.sin(x * .21) * Math.cos(z * .28) + .045 * Math.sin(z * .7 + x * .5)) * smooth((1 - q) * 4);
   const lagoon = Math.hypot((x - 10) / 17, (z + 3) / 12);
@@ -31,6 +32,22 @@ export function terrainHeight(x, z) {
 }
 export const isWater = (x, z) => terrainHeight(x, z) < .12;
 export const floorAt = (x, z) => Math.max(.13, terrainHeight(x, z));
+// The renderer, board support, spray and camera all sample this same swell.
+export function swellAt(x,z,time=0,weather='sunny') {
+  const exposure=smooth((coastRadius(x,z)-.93)*1.8),amplitude=(2.5+(weather==='windy'?1.0:0))*exposure;
+  const phase=x*.10-z*.16-time*1.35,secondary=-x*.17+z*.075-time*.79;
+  const harmonic=Math.cos(phase)+.48*Math.cos(2*phase+.5);
+  return {height:.075+amplitude*(Math.sin(phase)+.24*Math.sin(2*phase+.5))+.08*exposure*Math.sin(secondary),
+    dx:amplitude*.10*harmonic-.0136*exposure*Math.cos(secondary),dz:-amplitude*.16*harmonic+.006*exposure*Math.cos(secondary),
+    face:Math.max(0,Math.cos(phase)),phase,exposure};
+}
+export const SWELL_GLSL = `
+float seaExposure(vec2 p){vec2 q=vec2((p.x+4.)/49.,(p.y+1.)/36.);float a=atan(q.y,q.x);float r=length(q)*(1.+.045*sin(5.*a)+.025*cos(3.*a));return smoothstep(0.,1.,(r-.93)*1.8);}
+float seaHeight(vec2 p,float t,float storm){float e=seaExposure(p);float phase=p.x*.10-p.y*.16-t*1.35;return .075+(2.5+1.*storm)*e*(sin(phase)+.24*sin(2.*phase+.5))+.08*e*sin(-p.x*.17+p.y*.075-t*.79);}
+`;
+export function ridingHeight(x,z,env) {
+  return isWater(x,z)?Math.max(terrainHeight(x,z),swellAt(x,z,env.time,env.weather).height+.055):floorAt(x,z);
+}
 export function currentAt(x, z, reversed = false) {
   const lagoon = x < 30 && Math.hypot((x - 10) / 19, (z + 3) / 15) < 1.35;
   let dx, dz, strength, name;
@@ -145,7 +162,7 @@ export function stepPlayer(p, input, env, dt) {
   p.vy -= 18 * dt; p.y += p.vy * dt;
   p.x += p.vx * dt; p.z += p.vz * dt;
   p.collision = false;
-  let support = floorAt(p.x, p.z);
+  let support = ridingHeight(p.x,p.z,env);
   for (let pass = 0; pass < 2; pass++) for (const o of OBSTACLES) {
     const hit = overlap(p.x, p.z, .34, o);
     if (!hit || p.y + 1.85 <= o.base) continue;
@@ -156,13 +173,50 @@ export function stepPlayer(p, input, env, dt) {
     const into = Math.min(0, p.vx * hit.nx + p.vz * hit.nz);
     p.vx -= into * hit.nx; p.vz -= into * hit.nz; p.collision = true;
   }
-  support = Math.max(support, floorAt(p.x, p.z));
+  support = Math.max(support,ridingHeight(p.x,p.z,env));
+  if(wasGrounded&&!input.jump&&isWater(p.x,p.z)&&Math.abs(p.y-support)<.28){p.y=support;p.vy=0;}
   if (p.y <= support && p.vy <= 0) { p.y = support; p.vy = 0; p.grounded = true; }
   else p.grounded = false;
   const q = Math.hypot(p.x / LIMIT.x, p.z / LIMIT.z);
   if (q > .9998) { p.x *= .9998 / q; p.z *= .9998 / q; }
   p.speed = Math.hypot(p.vx, p.vz); p.base = base; p.toolBonus = base - TOOLS.foot[surface][sprintIndex]; p.windEffect = windEffect; p.currentEffect = currentEffect; p.water = water;
   if (moving) p.facing = Math.atan2(-ux, -uz);
+  return p;
+}
+// Surf controls turn the board through an arc. Releasing the controls preserves
+// glide; W pumps the face, S checks speed, Shift spends recovered flow energy.
+export function stepSurfer(p,input,env,dt) {
+  p.energy??=1;p.carve??=0;p.rideTime??=0;p.airTime??=0;p.landing??=0;
+  const steer=clamp(input.steer||0,-1,1),pump=clamp(input.pump||0,0,1),brake=clamp(input.brake||0,0,1);
+  p.carve+=(steer-p.carve)*(1-Math.exp(-dt*(steer?12:17)));
+  p.facing-=p.carve*(.90+Math.min(p.speed,22)*.04)*dt*(p.grounded?1:.55);
+  const forward={x:-Math.sin(p.facing),z:-Math.cos(p.facing)},wave=swellAt(p.x,p.z,env.time,env.weather);
+  const across=1-Math.abs(forward.x*.53-forward.z*.848),trim=.3+.7*across;
+  p.waveDrive=wave.face*trim;p.rideTime+=dt;p.pump=pump;
+  const boost=!!input.sprint&&p.energy>.03&&brake<.1;
+  p.energy=clamp(p.energy+dt*(boost?-.27:.1+p.waveDrive*.12+Math.abs(p.carve)*.025),0,1);
+  p.boosting=boost;
+  const w=windAt(env.weather,env.windAngle,env.time),c=currentAt(p.x,p.z,env.reversed);
+  p.windEffect=(forward.x*w.x+forward.z*w.z)*w.strength*.18;
+  p.currentEffect=(forward.x*c.x+forward.z*c.z)*c.strength*.38;
+  p.base=boost?19:pump>0?12:6.2;
+  const target=clamp(p.base+p.waveDrive*4+p.windEffect+p.currentEffect-brake*12,1.2,25);
+  const response=p.grounded?(brake>0?3.1:target>p.speed?.62:.28):.04;
+  const speed=p.speed+(target-p.speed)*(1-Math.exp(-dt*response));
+  const velocity=softenOutward(forward.x*speed,forward.z*speed,p.x,p.z);
+  p.vx=velocity.x;p.vz=velocity.z;p.x+=p.vx*dt;p.z+=p.vz*dt;p.collision=false;
+  const wasGrounded=p.grounded;
+  if(input.jump&&p.grounded){p.vy=7.4+wave.face*1.0+pump*.8;p.grounded=false;p.airTime=0;}
+  const support=ridingHeight(p.x,p.z,env);
+  if(p.grounded){p.y=support;p.vy=0;}else{
+    p.vy-=18*dt;p.y+=p.vy*dt;p.airTime+=dt;
+    if(p.y<=support&&p.vy<0){p.landing=clamp(-p.vy/10,.2,1);p.y=support;p.vy=0;p.grounded=true;}
+  }
+  for(const o of OBSTACLES){const hit=overlap(p.x,p.z,.4,o);if(!hit||p.y>=o.top-.05)continue;
+    p.x+=hit.nx*(hit.depth+.002);p.z+=hit.nz*(hit.depth+.002);p.collision=true;p.vx*=.45;p.vz*=.45;}
+  const q=boundaryWeight(p.x,p.z).q;if(q>.9998){p.x*=.9998/q;p.z*=.9998/q;}
+  p.speed=Math.hypot(p.vx,p.vz);p.water=isWater(p.x,p.z);p.toolBonus=p.base-TOOLS.foot.water[0];p.landing*=Math.exp(-dt*7);
+  if(wasGrounded&&!p.grounded)p.airTime=0;
   return p;
 }
 export const relation = dot => dot > .35 ? 'with' : dot < -.35 ? 'against' : 'cross';

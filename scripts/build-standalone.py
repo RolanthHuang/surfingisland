@@ -36,6 +36,8 @@ script = 'const THREE=(()=>{\n' + vendor[:match.start()] + '\nreturn {' + ','.jo
 script += addon('vendor/BufferGeometryUtils.js', ['toTrianglesDrawMode'])
 script += addon('vendor/GLTFLoader.js', ['GLTFLoader'])
 script += addon('character.js', ['DetailedCharacter'])
+script += addon('surf-effects.js', ['SurfEffects'])
+script += addon('surf-audio.js', ['SurfAudio'])
 core = (root / 'island.js').read_text()
 exports = re.findall(r'export (?:const|function) (\w+)', core)
 script += 'const {' + ','.join(exports) + '}=(()=>{\n' + core.replace('export ', '') + '\nreturn {' + ','.join(exports) + '};})();\n'

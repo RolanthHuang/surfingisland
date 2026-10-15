@@ -41,6 +41,11 @@ for(const tool of ['surfboard','jetski','surfboard','foot','exoskeleton']){
   feet().forEach((p,i)=>assert.ok(p.distanceTo(beforeFeet[i])<.01,`${tool}: tool poses must not accumulate.`));
   assert.ok(hip().y>parent.position.y+.5,`${tool}: torso must remain above the surface.`);
 }
+player.tool='surfboard';player.pump=1;player.carve=.8;
+for(let i=0;i<1800;i++)character.update(1/60,player,{},i/60);
+const ankles=feet().map(p=>parent.worldToLocal(p));
+assert.ok(Math.abs(ankles[0].z-ankles[1].z)>.65,'Surf stance must place the feet fore and aft on the board.');
+assert.ok(ankles.every(p=>p.y>.22&&p.y<.4),'Both ankles must stay over the deck when crouching and carving.');
 player.tool='foot';player.speed=8;
 const samples=[];
 for(let i=0;i<90;i++){character.update(1/60,player,{},i/60);samples.push(character.bones.LeftLeg.quaternion.clone());}

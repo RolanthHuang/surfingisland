@@ -1,6 +1,8 @@
 import * as THREE from './vendor/three.module.min.js';
 import { DetailedCharacter } from './character.js';
-import { LIMIT, ZONES, PALMS, OBSTACLES, TOOLS, terrainClass, recommendedTool, makeTerrainTracker, advanceTerrainTracker, clamp, smooth, seeded, terrainHeight, floorAt, isWater, currentAt, windAt, boundaryWeight, makePlayer, stepPlayer, comboKey } from './island.js';
+import { SurfEffects } from './surf-effects.js';
+import { SurfAudio } from './surf-audio.js';
+import { LIMIT, ZONES, PALMS, OBSTACLES, TOOLS, SWELL_GLSL, swellAt, ridingHeight, stepSurfer, terrainClass, recommendedTool, makeTerrainTracker, advanceTerrainTracker, clamp, smooth, seeded, terrainHeight, floorAt, isWater, currentAt, windAt, boundaryWeight, makePlayer, stepPlayer, comboKey } from './island.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('world');
@@ -56,7 +58,7 @@ function textureFromCanvas(width, height, draw) {
 }
 
 // A continuous terrain also provides the exact walkable shoreline used by the runner.
-const terrainGeo = new THREE.PlaneGeometry(240, 210, 240, 210); terrainGeo.rotateX(-Math.PI / 2);
+const terrainGeo = new THREE.PlaneGeometry(440, 360, 220, 180); terrainGeo.rotateX(-Math.PI / 2);
 const vertices = terrainGeo.attributes.position, terrainColors = [];
 const sandColor = new THREE.Color('#ead3a2'), wetColor = new THREE.Color('#b4cfb2'), grassColor = new THREE.Color('#9eb87a'), deepSand = new THREE.Color('#75b8a9');
 const tmpColor = new THREE.Color();
@@ -71,30 +73,43 @@ terrainGeo.setAttribute('color', new THREE.Float32BufferAttribute(terrainColors,
 const terrain = mesh(terrainGeo, mat('#ffffff', { vertexColors: true, roughness: 1 }), 0, 0, 0, scene, false);
 
 const waterMaterial = new THREE.ShaderMaterial({
-  transparent: true, depthWrite: false,
+  transparent: false, depthWrite: true,
   uniforms: { uTime: { value: 0 }, uStorm: { value: 0 }, uWind: { value: new THREE.Vector2(.7, -.7) }, uReverse: { value: 1 }, uSky: { value: skyColor.clone() } },
   vertexShader: `varying vec3 vWorld; uniform float uTime; uniform float uStorm;
-  void main(){vec3 p=position; p.z+=sin(p.x*.12+uTime*1.3)*cos(p.y*.15-uTime*.7)*(.025+.045*uStorm); vec4 wp=modelMatrix*vec4(p,1.);vWorld=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}`,
+  ${SWELL_GLSL}
+  void main(){vec3 p=position;p.z=seaHeight(vec2(p.x,-p.y),uTime,uStorm)-.075;vec4 wp=modelMatrix*vec4(p,1.);vWorld=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}`,
   fragmentShader: `varying vec3 vWorld; uniform float uTime; uniform float uStorm; uniform vec2 uWind; uniform float uReverse; uniform vec3 uSky;
+  ${SWELL_GLSL}
   float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
-  float shoreline(vec2 p){vec2 q=vec2((p.x+4.)/49.,(p.y+1.)/36.);float a=atan(q.y,q.x);float r=length(q)*(1.+.045*sin(5.*a)+.025*cos(3.*a));float h=clamp((1.-r)*10.,-3.7,1.25);float l=length(vec2((p.x-10.)/17.,(p.y+3.)/12.));h=min(h,(l-1.)*7.);if(p.x>12.)h=min(h,(abs(p.y+3.)-5.5)*.58+max(0.,15.-p.x)*.18);return h;}
+  float shoreline(vec2 p){vec2 q=vec2((p.x+4.)/49.,(p.y+1.)/36.);float a=atan(q.y,q.x);float r=length(q)*(1.+.045*sin(5.*a)+.025*cos(3.*a));float h=clamp((1.-r)*10.,-14.,1.25);float l=length(vec2((p.x-10.)/17.,(p.y+3.)/12.));h=min(h,(l-1.)*7.);if(p.x>12.)h=min(h,(abs(p.y+3.)-5.5)*.58+max(0.,15.-p.x)*.18);return h;}
   void main(){vec2 p=vWorld.xz;float t=uTime;float depth=max(.0,-shoreline(p));float shallow=exp(-depth*.62);
-  vec3 col=mix(vec3(.035,.39,.48),vec3(.23,.72,.62),shallow);
+  vec3 col=mix(vec3(.008,.28,.38),vec3(.06,.60,.51),shallow);
+  float phase=p.x*.10-p.y*.16-t*1.35,e=seaExposure(p),amp=(2.5+1.*uStorm)*e;
+  float harmonic=cos(phase)+.48*cos(2.*phase+.5),secondary=-p.x*.17+p.y*.075-t*.79;
+  vec3 normal=normalize(vec3(-amp*.10*harmonic+.0136*e*cos(secondary),1.,amp*.16*harmonic-.006*e*cos(secondary)));
+  vec3 viewDir=normalize(cameraPosition-vWorld);float fresnel=pow(1.-max(0.,dot(normal,viewDir)),3.);
+  col=mix(col,uSky*.75,fresnel*.61);
+  vec3 sunlight=normalize(vec3(-.4,.8,-.3));float spec=pow(max(0.,dot(reflect(-sunlight,normal),viewDir)),95.);
+  col+=spec*vec3(1.,.94,.69)*1.5;
+  float crest=smoothstep(.80,1.06,sin(phase)+.24*sin(2.*phase+.5));
+  float lace=.64+.36*sin(p.x*6.+sin(p.y*3.-t)*2.);
+  col=mix(col,vec3(.89,.98,.91),crest*e*lace*(.54+.18*uStorm));
   float swell=sin(p.x*.34+p.y*.23-t*.8)+sin(p.x*.18-p.y*.39+t*.65); col+=swell*.012;
   vec2 flow=vec2(.9,-.25); if(p.x>44.)flow=vec2(.16,-.98);if(p.y< -33.)flow=vec2(-.96,.16);flow*=uReverse;
   float wave=sin(p.x*.57+p.y*.9-dot(flow,p)*.65+t*(1.+uStorm*.65));float w2=sin(p.x*.9-p.y*.44+t*.58);
   float lines=pow(max(0.,wave*w2),19.)*(.025+uStorm*.04);col+=vec3(.8,.95,.84)*lines;
   float foam=(1.-smoothstep(.12,1.0,depth))*smoothstep(.65,.96,sin(depth*12.-t*1.9+swell*.5))*.45;
   col=mix(col,vec3(.77,.92,.78),foam);
-  vec2 glitter=floor(p*3.+vec2(t*.08,0.));float glint=step(.992,hash(glitter))*pow(max(0.,sin(t*2.5+hash(glitter)*60.)),9.);
+  vec2 glitter=floor(p*3.+vec2(t*.08,0.)),spark=fract(p*3.+vec2(t*.08,0.))-.5;float glint=step(.992,hash(glitter))*pow(max(0.,sin(t*2.5+hash(glitter)*60.)),9.)*exp(-dot(spark,spark)*180.);
   col+=glint*vec3(.7,.79,.58)*(.6+uStorm*.25);
   float camDist=distance(cameraPosition.xz,p);float haze=smoothstep(105.,340.,camDist);col=mix(col,uSky,haze*.9);
-  gl_FragColor=vec4(col,mix(.96,.88,shallow));
+  gl_FragColor=vec4(col,1.);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   }`
 });
-const water = mesh(new THREE.PlaneGeometry(1400, 1400, 110, 110), waterMaterial, 0, .075, 0, scene, false); water.rotation.x = -Math.PI / 2; water.renderOrder = 2;
+const farWater=mesh(new THREE.PlaneGeometry(1400,1400),new THREE.MeshBasicMaterial({color:'#3e929b'}),0,-10,0,scene,false);farWater.rotation.x=-Math.PI/2;
+const water = mesh(new THREE.PlaneGeometry(540,440,270,220), waterMaterial, 0, .075, 0, scene, false); water.rotation.x = -Math.PI / 2; water.renderOrder = 2;
 
 // A soft sky, low cloud banks, and distant unplayable silhouettes establish scale.
 const sky = mesh(new THREE.SphereGeometry(650, 24, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
@@ -243,41 +258,17 @@ const boatSail=new THREE.BufferGeometry();boatSail.setAttribute('position',new T
 
 // Runner with separate limbs and articulated knees, all modeled locally.
 const avatar=new THREE.Group();scene.add(avatar);
-const bodyPivot=new THREE.Group();avatar.add(bodyPivot);
-const torso=mesh(new THREE.CylinderGeometry(.27,.22,.6,10),materials.coral,0,1.25,0,bodyPivot);torso.scale.z=.67;
-const stripe=box(.4,.055,.025,materials.white,0,1.43,-.18,bodyPivot);
-const neck=mesh(new THREE.CylinderGeometry(.09,.10,.13,8),materials.skin,0,1.6,0,bodyPivot);
-const head=sphere(.24,materials.skin,0,1.85,0,bodyPivot);head.scale.multiply(new THREE.Vector3(1,1.12,.98));
-const hair=sphere(.244,materials.hair,0,1.97,.03,bodyPivot);hair.scale.multiply(new THREE.Vector3(1,.8,.98));
-const bun=sphere(.12,materials.hair,0,2.11,.16,bodyPivot);
-const visor=mesh(new THREE.CylinderGeometry(.26,.26,.055,12),materials.teal,0,1.98,0,bodyPivot);
-const brim=box(.33,.035,.18,materials.teal,0,1.98,-.23,bodyPivot);brim.rotation.x=.05;
-for(const x of [-.085,.085])sphere(.019,materials.dark,x,1.85,-.226,bodyPivot);
-const nose=sphere(.045,materials.skinShade,0,1.8,-.245,bodyPivot);nose.scale.multiply(new THREE.Vector3(.7,.6,1));
-const shorts=mesh(new THREE.CylinderGeometry(.24,.28,.26,8),materials.teal,0,.91,0,bodyPivot);shorts.scale.z=.8;
-const backpack=box(.32,.43,.14,materials.dark,0,1.31,.21,bodyPivot);const packStripe=box(.25,.07,.025,materials.gold,0,1.32,.295,bodyPivot);
-const arms=[],legs=[];
-for(const side of [-1,1]){
-  const shoulder=new THREE.Group();shoulder.position.set(side*.32,1.49,0);bodyPivot.add(shoulder);
-  sphere(.105,materials.skin,0,-.04,0,shoulder);
-  const upper=mesh(new THREE.CapsuleGeometry(.075,.26,3,7),materials.skin,0,-.20,0,shoulder);
-  const elbow=new THREE.Group();elbow.position.y=-.34;elbow.rotation.x=-.5;shoulder.add(elbow);
-  mesh(new THREE.CapsuleGeometry(.066,.25,3,7),materials.skin,0,-.17,0,elbow);sphere(.072,materials.skin,0,-.34,0,elbow);arms.push({shoulder,elbow,side});
-  const hip=new THREE.Group();hip.position.set(side*.14,.91,0);bodyPivot.add(hip);
-  mesh(new THREE.CylinderGeometry(.095,.08,.37,8),materials.skin,0,-.2,0,hip);
-  const shortsLeg=mesh(new THREE.CylinderGeometry(.13,.13,.16,8),materials.teal,0,-.065,0,hip);
-  const knee=new THREE.Group();knee.position.y=-.39;hip.add(knee);
-  sphere(.077,materials.skin,0,0,0,knee);mesh(new THREE.CylinderGeometry(.073,.055,.34,8),materials.skin,0,-.16,0,knee);
-  mesh(new THREE.CylinderGeometry(.058,.058,.1,8),materials.white,0,-.31,0,knee);
-  const shoe=box(.17,.12,.30,materials.white,0,-.37,-.055,knee);const sole=box(.18,.03,.31,materials.teal,0,-.43,-.055,knee);legs.push({hip,knee,side});
-}
 const contactShadow=mesh(new THREE.CircleGeometry(.55,24),new THREE.MeshBasicMaterial({color:'#466b5d',transparent:true,opacity:.18,depthWrite:false}),0,.01,0,scene,false);contactShadow.rotation.x=-Math.PI/2;contactShadow.renderOrder=3;
 
 // Equipment has visible geometry as well as distinct movement rules.
 const surfRig=new THREE.Group();avatar.add(surfRig);
-const surfDeck=mesh(new THREE.SphereGeometry(1,18,10),materials.white,0,.11,0,surfRig);surfDeck.scale.set(.4,.085,1.4);
-box(.14,.018,2.15,materials.teal,0,.195,0,surfRig);box(.15,.02,.35,materials.gold,0,.20,-.9,surfRig);
-const surfFin=box(.025,.22,.24,materials.teal,0,-.03,.85,surfRig);
+const boardShape=new THREE.Shape();boardShape.moveTo(0,1.52);boardShape.bezierCurveTo(.32,1.25,.43,.35,.33,-.84);boardShape.quadraticCurveTo(.28,-1.23,.18,-1.34);boardShape.lineTo(0,-1.24);boardShape.lineTo(-.18,-1.34);boardShape.quadraticCurveTo(-.28,-1.23,-.33,-.84);boardShape.bezierCurveTo(-.43,.35,-.32,1.25,0,1.52);
+const surfGeo=new THREE.ExtrudeGeometry(boardShape,{depth:.055,bevelEnabled:true,bevelSegments:3,steps:1,bevelSize:.035,bevelThickness:.025,curveSegments:28});surfGeo.rotateX(-Math.PI/2);
+mesh(surfGeo,mat('#f4f4df',{roughness:.36}),0,.115,0,surfRig);
+box(.065,.012,2.25,materials.teal,0,.204,-.12,surfRig);box(.32,.014,.56,materials.dark,0,.209,.76,surfRig);
+for(const x of [-.19,0,.19])box(.018,.22,.24,materials.teal,x,-.01,.91,surfRig);
+const leash=new THREE.CatmullRomCurve3([new THREE.Vector3(.09,.31,.43),new THREE.Vector3(.45,.28,.75),new THREE.Vector3(.42,.15,1.2),new THREE.Vector3(0,.2,1.2)]);
+mesh(new THREE.TubeGeometry(leash,24,.009,4,false),materials.dark,0,0,0,surfRig);
 const jetRig=new THREE.Group();avatar.add(jetRig);
 const jetHull=mesh(new THREE.SphereGeometry(1,16,8),materials.coral,0,.25,-.1,jetRig);jetHull.scale.set(.58,.26,1.38);
 const jetDeck=mesh(new THREE.SphereGeometry(1,16,8),materials.white,0,.42,-.16,jetRig);jetDeck.scale.set(.49,.18,1.20);
@@ -286,18 +277,12 @@ const jetHood=mesh(new THREE.SphereGeometry(1,12,7),materials.teal,0,.62,-.67,je
 lineBetween(new THREE.Vector3(0,.62,-.60),new THREE.Vector3(0,1.03,-.45),.045,materials.dark,jetRig);
 lineBetween(new THREE.Vector3(-.34,1.03,-.45),new THREE.Vector3(.34,1.03,-.45),.045,materials.dark,jetRig);
 const jetSkids=[];for(const side of [-1,1]){const skid=box(.12,.12,1.55,materials.gold,side*.46,.08,.12,jetRig);jetSkids.push(skid);}
-const steel=mat('#b9ccbf',{metalness:.42,roughness:.4}),exoGlow=mat('#c4df9d',{emissive:'#80ac63',emissiveIntensity:.35});
-const exoParts=[],exoBack=new THREE.Group();bodyPivot.add(exoBack);exoParts.push(exoBack);
-box(.13,.78,.16,steel,0,1.25,.32,exoBack);box(.19,.25,.10,exoGlow,0,1.35,.43,exoBack);
-for(const side of [-1,1]){box(.10,.6,.10,steel,side*.27,1.23,.17,exoBack);box(.18,.10,.37,steel,side*.28,1.49,0,exoBack);}
-for(const leg of legs){
-  const thigh=new THREE.Group();leg.hip.add(thigh);exoParts.push(thigh);box(.10,.37,.14,steel,leg.side*.11,-.18,.025,thigh);sphere(.10,exoGlow,leg.side*.11,-.37,.025,thigh);
-  const shin=new THREE.Group();leg.knee.add(shin);exoParts.push(shin);box(.10,.29,.12,steel,leg.side*.10,-.18,.02,shin);box(.22,.055,.35,steel,0,-.45,-.055,shin);
-}
-function applyToolVisuals(){surfRig.visible=player.tool==='surfboard';jetRig.visible=player.tool==='jetski';for(const p of exoParts)p.visible=player.tool==='exoskeleton';detailedCharacter.setTool(player.tool);}
+function applyToolVisuals(){surfRig.visible=player.tool==='surfboard';jetRig.visible=player.tool==='jetski';detailedCharacter.setTool(player.tool);}
 const detailedCharacter=new DetailedCharacter(avatar,renderer);
-let characterSettled=false,classicCharacter=false;
-detailedCharacter.load(progress=>{const label=$('loadingDetail');if(label)label.textContent=progress>0?`人物載入 ${Math.round(progress*100)}%`:'正在整理人物與衣料細節';}).then(()=>{characterSettled=true;bodyPivot.visible=classicCharacter;$('characterState').textContent='完整人物與材質已就緒';}).catch(error=>{characterSettled=true;classicCharacter=true;bodyPivot.visible=true;$('characterState').textContent='精緻人物未載入，暫用輕量版';console.error('Detailed character load failed:',error);});
+let characterSettled=false;
+detailedCharacter.load(progress=>{const label=$('loadingDetail');if(label)label.textContent=progress>0?`人物載入 ${Math.round(progress*100)}%`:'正在整理人物與衣料細節';}).then(()=>{characterSettled=true;$('characterState').textContent='精緻人物 · 完整服裝與骨架';}).catch(error=>{characterSettled=true;$('characterState').textContent='人物載入失敗，請重新整理';$('loadingDetail').textContent='人物載入失敗，請重新整理或確認網路連線。';console.error('Character load failed:',error);});
+const surfEffects=new SurfEffects(scene);
+const surfAudio=new SurfAudio();
 
 // Reusable rings and grains leave a trail without allocating objects each frame.
 const particleCount=80,particles=Array.from({length:particleCount},()=>({life:0}));let particleCursor=0,particleTimer=0;
@@ -313,55 +298,63 @@ function updateParticles(dt){
   }ringMesh.instanceMatrix.needsUpdate=true;dustMesh.instanceMatrix.needsUpdate=true;
 }
 
-let player=makePlayer();player.facing=0;
+let player=makePlayer('surf');player.tool='surfboard';player.facing=ZONES.surf.yaw;
 const env={weather:'sunny',windAngle:Math.PI/4,reversed:false,time:0};
-let weatherBlend=0,started=false,paused=false,overview=false,cameraYaw=.15,cameraPitch=.23,cameraDistance=6.8;
+player.y=ridingHeight(player.x,player.z,env);
+let weatherBlend=0,started=false,paused=false,overview=false,cameraYaw=player.facing+.20,cameraPitch=.06,cameraDistance=6.8;
 let inspecting=false,inspectDistance=4.6,savedCamera=null,lastShadowSpan=75;
-let visibleYaw=0,walkTime=0,jumpQueued=false,sprintToggle=false,touchX=0,touchZ=0;
+let visibleYaw=player.facing,walkTime=0,jumpQueued=false,sprintToggle=false,touchX=0,touchZ=0;
+let drawerOpen=false,cleanView=false,photoMode=false,lastOrbit=-10;
 const keys=new Set(),discovered=new Set();let comboCandidate=null,comboDwell=0,toastTimer=0,hudTime=0,lastSurface=false;
 const terrainTracker=makeTerrainTracker(terrainClass(player.x,player.z));
 let currentInput={x:0,z:0,sprint:false,jump:false};
 const speedHistory=Array(28).fill(0),hudLog=[];
+const drawer=$('islandDrawer');
+for(const selector of ['.weather-switch','.top-actions','#environment','.map-panel','.speed-panel'])drawer.append(document.querySelector(selector));
+$('environment').classList.remove('closed');
 
-function start(){if(started)return;started=true;$('intro').classList.add('dismissed');document.body.classList.add('playing');canvas.focus({preventScroll:true});}
+function start(){surfAudio.start();if(started)return;started=true;$('intro').classList.add('dismissed');document.body.classList.add('playing');canvas.focus({preventScroll:true});}
 function toast(text){$('toast').textContent=text;$('toast').classList.add('visible');toastTimer=3;}
 function resetKeys(){keys.clear();touchX=0;touchZ=0;jumpQueued=false;sprintToggle=false;$('touchSprint').setAttribute('aria-pressed','false');$('joystickKnob').style.transform='';}
 function teleport(zone){
-  start();const p=ZONES[zone],tool=player.tool;player=makePlayer(zone);player.tool=tool;applyToolVisuals();player.facing=p.yaw;visibleYaw=p.yaw;cameraYaw=p.yaw;
-  for(const p of particles)p.life=0;resetKeys();comboCandidate=null;comboDwell=0;
+  setDrawer(false);start();const p=ZONES[zone],tool=player.tool;player=makePlayer(zone);player.tool=tool;applyToolVisuals();player.facing=p.yaw;visibleYaw=p.yaw;cameraYaw=p.yaw+(tool==='surfboard'?.20:0);player.y=tool==='surfboard'||tool==='jetski'?ridingHeight(p.x,p.z,env):player.y;
+  for(const p of particles)p.life=0;surfEffects.clear();resetKeys();comboCandidate=null;comboDwell=0;cameraReady=false;
   document.querySelectorAll('[data-zone]').forEach(b=>b.classList.toggle('selected',b.dataset.zone===zone));
-  toast(`已抵達 ${p.label} · 隨時轉向，比較風與水流`);canvas.focus({preventScroll:true});
+  toast(zone==='surf'?'沿著浪面，畫出你的第一道弧線':`已抵達 ${p.label}`);canvas.focus({preventScroll:true});
 }
+function setDrawer(open){drawerOpen=open;drawer.hidden=!open;document.body.classList.toggle('drawer-open',open);$('islandMenuToggle').setAttribute('aria-expanded',String(open));paused=open||photoMode||!!document.querySelector('dialog[open]');resetKeys();if(open){cleanView=false;updateCleanView();}else canvas.focus({preventScroll:true});}
+function updateCleanView(){document.body.classList.toggle('clean-view',cleanView||photoMode);document.body.classList.toggle('photo-mode',photoMode);$('restoreUI').hidden=!(cleanView||photoMode);$('restoreUI').textContent=photoMode?'回到衝浪 · F':'顯示介面 · H';}
+function togglePhoto(){if(document.querySelector('dialog[open]'))return;setDrawer(false);photoMode=!photoMode;paused=photoMode;resetKeys();updateCleanView();canvas.focus({preventScroll:true});}
+function enterSurf(){if(photoMode)togglePhoto();setDrawer(false);if(inspecting)toggleInspection();player.tool='surfboard';teleport('surf');player.speed=6;player.vx=-Math.sin(player.facing)*6;player.vz=-Math.cos(player.facing)*6;player.energy=1;cameraPitch=.06;lastOrbit=-10;}
+$('islandMenuToggle').onclick=()=>setDrawer(!drawerOpen);$('closeDrawer').onclick=()=>setDrawer(false);
+$('restartSurf').onclick=enterSurf;$('surfFromDrawer').onclick=enterSurf;$('photoButton').onclick=togglePhoto;
+$('restoreUI').onclick=()=>{if(photoMode)togglePhoto();else{cleanView=false;updateCleanView();}};
+$('quickTool').onclick=()=>openEquipment();
+$('soundToggle').onclick=()=>{surfAudio.enabled=!surfAudio.enabled;$('soundToggle').setAttribute('aria-pressed',String(surfAudio.enabled));$('soundToggle').textContent=surfAudio.enabled?'海浪聲 · 開啟':'海浪聲 · 關閉';if(surfAudio.enabled)surfAudio.start();};
+$('roamButton').onclick=()=>{player.tool='foot';teleport('beach');};
 function setWeather(weather){
   env.weather=weather;document.body.classList.toggle('wind-storm',weather==='windy');
   for(const id of ['sunny','windy']){$(id).classList.toggle('active',id===weather);$(id).setAttribute('aria-pressed',String(id===weather));}
   $('weatherNote').textContent=weather==='sunny'?'微風、平緩的浪，適合出發。':'強風與陣風，順逆風的差別更明顯。';
   toast(weather==='sunny'?'晴天 · 微風 1.8 m/s':'大風 · 約 12 m/s，試著順風與逆風跑');canvas.focus({preventScroll:true});
 }
-function selectCharacter(classic){
-  classicCharacter=classic;detailedCharacter.setClassic(classic);bodyPivot.visible=classic||!detailedCharacter.ready;
-  $('detailedCharacter').setAttribute('aria-pressed',String(!classic));$('classicCharacter').setAttribute('aria-pressed',String(classic));
-  $('characterState').textContent=classic?'輕量角色 · 簡約模型':detailedCharacter.ready?'精緻角色 · 完整服裝與骨架':'人物正在載入';canvas.focus({preventScroll:true});
-}
 function toggleInspection(){
-  if(paused)return;inspecting=!inspecting;document.body.classList.toggle('inspecting-character',inspecting);$('characterButton').setAttribute('aria-pressed',String(inspecting));resetKeys();
+  if(drawerOpen)setDrawer(false);if(paused)return;inspecting=!inspecting;document.body.classList.toggle('inspecting-character',inspecting);$('characterButton').setAttribute('aria-pressed',String(inspecting));resetKeys();
   if(inspecting){start();savedCamera={yaw:cameraYaw,pitch:cameraPitch,distance:cameraDistance};overview=false;$('overviewButton').setAttribute('aria-pressed','false');cameraYaw=visibleYaw+Math.PI;cameraPitch=.12;}
   else if(savedCamera){cameraYaw=savedCamera.yaw;cameraPitch=savedCamera.pitch;cameraDistance=savedCamera.distance;}
   $('characterControls').hidden=!inspecting;canvas.focus({preventScroll:true});
 }
 $('characterButton').onclick=toggleInspection;$('exitCharacter').onclick=toggleInspection;
-$('detailedCharacter').onclick=()=>selectCharacter(false);$('classicCharacter').onclick=()=>selectCharacter(true);
 $('faceView').onclick=()=>{inspectDistance=1.25;cameraPitch=.05;canvas.focus({preventScroll:true});};
 $('bodyView').onclick=()=>{inspectDistance=4.6;cameraPitch=.12;canvas.focus({preventScroll:true});};
-$('startButton').onclick=start;$('sunny').onclick=()=>setWeather('sunny');$('windy').onclick=()=>setWeather('windy');
+$('startButton').onclick=enterSurf;$('sunny').onclick=()=>setWeather('sunny');$('windy').onclick=()=>setWeather('windy');
 $('windLeft').onclick=()=>{env.windAngle-=Math.PI/4;toast('風向已逆時針轉 45°');canvas.focus({preventScroll:true});};
 $('windRight').onclick=()=>{env.windAngle+=Math.PI/4;toast('風向已順時針轉 45°');canvas.focus({preventScroll:true});};
 $('reverseCurrent').onclick=()=>{env.reversed=!env.reversed;$('reverseCurrent').setAttribute('aria-pressed',String(env.reversed));toast(env.reversed?'全島水流已反轉':'已恢復原本的水流方向');canvas.focus({preventScroll:true});};
-document.querySelectorAll('[data-zone]').forEach(b=>b.onclick=()=>teleport(b.dataset.zone));
+document.querySelectorAll('[data-zone]').forEach(b=>b.onclick=()=>b.dataset.zone==='surf'?enterSurf():teleport(b.dataset.zone));
 $('environmentToggle').onclick=()=>{const closed=$('environment').classList.toggle('closed');$('environmentToggle').setAttribute('aria-expanded',String(!closed));};
-if(innerWidth<=600){$('environment').classList.add('closed');$('environmentToggle').setAttribute('aria-expanded','false');}
 $('overviewButton').onclick=()=>{if(inspecting)toggleInspection();overview=!overview;document.body.classList.toggle('overview',overview);$('overviewButton').setAttribute('aria-pressed',String(overview));$('overviewButton').innerHTML=overview?'回到第三人稱 <span>↙</span>':'俯瞰全島 <span>↗</span>';toast(overview?'俯瞰全島 · 移動仍可控制角色':'回到第三人稱視角');canvas.focus({preventScroll:true});};
-function openDialog(id){paused=true;resetKeys();$(id).showModal();}
+function openDialog(id){setDrawer(false);paused=true;resetKeys();$(id).showModal();}
 function closeDialog(id){$(id).close();paused=false;canvas.focus({preventScroll:true});}
 function openEquipment(automatic=false){
   const terrain=terrainClass(player.x,player.z),recommended=recommendedTool(terrain,player.x,player.z);
@@ -379,10 +372,15 @@ $('toolButton').onclick=()=>openEquipment();$('equipmentStatus').onclick=()=>ope
 document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>chooseTool(b.dataset.tool));
 $('helpButton').onclick=()=>openDialog('helpDialog');$('discoveryButton').onclick=()=>{renderCombos();openDialog('discoveryDialog');};
 $('pauseButton').onclick=()=>openDialog('pauseDialog');$('resumeButton').onclick=()=>closeDialog('pauseDialog');
-$('resetButton').onclick=()=>{closeDialog('pauseDialog');teleport('beach');};
+$('resetButton').onclick=()=>{closeDialog('pauseDialog');enterSurf();};
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeDialog(b.dataset.close));
 document.querySelectorAll('dialog').forEach(d=>{d.addEventListener('cancel',()=>{paused=false;resetKeys();});d.addEventListener('click',e=>{if(e.target!==d)return;const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeDialog(d.id);});});
 window.addEventListener('keydown',e=>{
+  if(e.code==='KeyF'&&!e.repeat){e.preventDefault();togglePhoto();return;}
+  if(e.code==='KeyH'&&!e.repeat){if(photoMode)togglePhoto();else{cleanView=!cleanView;updateCleanView();}return;}
+  if(e.code==='KeyM'&&!e.repeat){if(photoMode)togglePhoto();setDrawer(!drawerOpen);return;}
+  if(e.code==='Escape'&&photoMode){e.preventDefault();togglePhoto();return;}
+  if(e.code==='Escape'&&drawerOpen){e.preventDefault();setDrawer(false);return;}
   if(e.code==='Escape'&&inspecting&&!document.querySelector('dialog[open]')){e.preventDefault();toggleInspection();return;}
   if(e.code==='Escape'){if(!document.querySelector('dialog[open]')){e.preventDefault();openDialog('pauseDialog');}return;}
   if(paused)return;
@@ -390,13 +388,13 @@ window.addEventListener('keydown',e=>{
   if(e.code==='KeyE'&&!e.repeat){e.preventDefault();openEquipment();return;}
   if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight'].includes(e.code)){e.preventDefault();keys.add(e.code);start();}
   if(e.code==='Space'&&!e.repeat)jumpQueued=true;
-  if(e.code==='KeyR'&&!e.repeat)teleport('beach');
+  if(e.code==='KeyR'&&!e.repeat)enterSurf();
 });
 window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',resetKeys);
-document.addEventListener('visibilitychange',()=>{resetKeys();});
+document.addEventListener('visibilitychange',()=>{resetKeys();surfAudio.update(player,env.time,document.hidden||paused);});
 let dragging=false,lastPointerX=0,lastPointerY=0;
-canvas.addEventListener('pointerdown',e=>{if(paused)return;dragging=true;lastPointerX=e.clientX;lastPointerY=e.clientY;canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});});
-canvas.addEventListener('pointermove',e=>{if(!dragging||overview)return;cameraYaw-=(e.clientX-lastPointerX)*.0045;cameraPitch=clamp(cameraPitch+(e.clientY-lastPointerY)*.003,inspecting?-.2:.10,.94);lastPointerX=e.clientX;lastPointerY=e.clientY;});
+canvas.addEventListener('pointerdown',e=>{if(paused&&!photoMode)return;dragging=true;lastOrbit=env.time;lastPointerX=e.clientX;lastPointerY=e.clientY;canvas.setPointerCapture(e.pointerId);canvas.focus({preventScroll:true});});
+canvas.addEventListener('pointermove',e=>{if(!dragging||overview)return;lastOrbit=env.time;cameraYaw-=(e.clientX-lastPointerX)*.0045;cameraPitch=clamp(cameraPitch+(e.clientY-lastPointerY)*.003,inspecting?-.2:player.tool==='surfboard'?-.05:.10,.94);lastPointerX=e.clientX;lastPointerY=e.clientY;});
 canvas.addEventListener('pointerup',()=>dragging=false);canvas.addEventListener('pointercancel',()=>dragging=false);
 canvas.addEventListener('wheel',e=>{e.preventDefault();if(inspecting)inspectDistance=clamp(inspectDistance+e.deltaY*.004,1.05,4.8);else cameraDistance=clamp(cameraDistance+e.deltaY*.008,3.2,22);},{passive:false});canvas.addEventListener('contextmenu',e=>e.preventDefault());
 const joystick=$('joystick');let stickPointer=null;
@@ -404,13 +402,15 @@ function stickMove(e){if(stickPointer!==e.pointerId)return;const r=joystick.getB
 joystick.addEventListener('pointerdown',e=>{start();stickPointer=e.pointerId;joystick.setPointerCapture(e.pointerId);stickMove(e);});joystick.addEventListener('pointermove',stickMove);
 function stickEnd(e){if(e.pointerId!==stickPointer)return;stickPointer=null;touchX=0;touchZ=0;$('joystickKnob').style.transform='';}
 joystick.addEventListener('pointerup',stickEnd);joystick.addEventListener('pointercancel',stickEnd);
-$('touchJump').onclick=()=>{start();jumpQueued=true;};$('touchSprint').onclick=()=>{start();sprintToggle=!sprintToggle;$('touchSprint').setAttribute('aria-pressed',String(sprintToggle));};
+$('touchJump').onclick=()=>{start();jumpQueued=true;};$('touchSprint').textContent='加速';$('touchSprint').onclick=()=>{start();sprintToggle=!sprintToggle;$('touchSprint').setAttribute('aria-pressed',String(sprintToggle));};
 
 const names=['北','東北','東','東南','南','西南','西','西北'];
 function directionName(angle){return names[((Math.round(angle/(Math.PI/4))%8)+8)%8];}
 function signedEffect(id,value,active=true){const el=$(id);el.textContent=active?(value>=0?'+':'')+value.toFixed(1):'—';el.classList.toggle('positive',active&&value>.05);el.classList.toggle('negative',active&&value<-.05);}
 function locationName(p){if(p.x>44)return '東側急流水道';if(p.z< -26)return '北岸風廊';if(p.water&&p.x>0&&p.x<36&&Math.abs(p.z+3)<15)return '透光潟湖';if(p.water)return '環島淺海';if(p.x>13&&p.z>7)return '漂流木障礙區';if(p.x< -16&&p.z<13)return '棕櫚綠洲';return '南岸沙灘';}
 function updateHUD(){
+  $('rideSpeed').textContent=Math.round(player.speed*3.6);$('flowEnergy').style.width=`${(player.energy??1)*100}%`;
+  $('rideState').textContent=!started?'等待下一道浪':!player.grounded?'AIR · 躍起':player.tool!=='surfboard'?TOOLS[player.tool].name:player.boosting?'BOOST · 爆發':Math.abs(player.carve||0)>.25?'CARVE · 切浪':player.pump>.1?'PUMP · 壓板':'FLOW · 自由滑行';
   $('speed').textContent=player.speed.toFixed(1);$('speedBar').style.width=`${Math.min(100,player.speed/24*100)}%`;
   $('baseEffect').textContent=player.base.toFixed(1);signedEffect('windEffect',player.windEffect,currentInput.x!==0||currentInput.z!==0);signedEffect('currentEffect',player.currentEffect,player.water&&(currentInput.x!==0||currentInput.z!==0)&&player.grounded);
   const edge=boundaryWeight(player.x,player.z).q>.86;$('edgeNotice').hidden=!edge;
@@ -422,9 +422,9 @@ function updateHUD(){
   $('windSpeed').textContent=w.strength.toFixed(1);$('windDirection').textContent=directionName(env.windAngle);$('windDial').querySelector('svg').style.transform=`rotate(${env.windAngle*180/Math.PI}deg)`;
   $('currentSpeed').textContent=c.strength.toFixed(1);$('currentName').textContent=player.water?c.name:'近岸水流';$('currentDial').querySelector('svg').style.transform=`rotate(${Math.atan2(c.x,-c.z)*180/Math.PI}deg)`;
   speedHistory.shift();speedHistory.push(player.speed);$('speedPath').setAttribute('d',speedHistory.map((s,i)=>`${i?'L':'M'}${(i/(speedHistory.length-1)*90).toFixed(1)} ${(33-Math.min(s/24,1)*29).toFixed(1)}`).join(''));
-  if(lastSurface!==player.water&&started){toast(player.water?'踏上水面 · 水流現在會影響跑動速度':'回到沙灘 · 感受風的推力');lastSurface=player.water;}
+  if(lastSurface!==player.water&&started){if(player.tool!=='surfboard')toast(player.water?'踏上水面 · 水流現在會影響跑動速度':'回到沙灘 · 感受風的推力');lastSurface=player.water;}
   $('comboCount').textContent=discovered.size;
-  canvas.dataset.diagnostics=JSON.stringify({version:'1.2.0',character:classicCharacter?'classic':'detailed',characterReady:detailedCharacter.ready,characterStats:detailedCharacter.stats,inspecting,x:+player.x.toFixed(3),z:+player.z.toFixed(3),y:+player.y.toFixed(3),speed:+player.speed.toFixed(2),grounded:player.grounded,collision:player.collision,surface:player.water?'water':'sand',terrain:terrainClass(player.x,player.z),tool:player.tool,base:player.base,weather:env.weather,reversed:env.reversed,combos:discovered.size,paused,overview,boundary:+boundaryWeight(player.x,player.z).q.toFixed(4),fps:Math.round(1000/frameMean),calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
+  canvas.dataset.diagnostics=JSON.stringify({version:'2.0.0',character:'detailed',heading:+player.facing.toFixed(3),cameraYaw:+cameraYaw.toFixed(3),drawerOpen,cleanView,photoMode,surfing:player.tool==='surfboard'&&player.water,carve:+(player.carve||0).toFixed(3),energy:+(player.energy??1).toFixed(2),wave:+swellAt(player.x,player.z,env.time,env.weather).height.toFixed(3),wake:surfEffects.stats.wake,spray:surfEffects.stats.spray,characterReady:detailedCharacter.ready,characterStats:detailedCharacter.stats,inspecting,x:+player.x.toFixed(3),z:+player.z.toFixed(3),y:+player.y.toFixed(3),speed:+player.speed.toFixed(2),grounded:player.grounded,collision:player.collision,surface:player.water?'water':'sand',terrain:terrainClass(player.x,player.z),tool:player.tool,base:player.base,weather:env.weather,reversed:env.reversed,combos:discovered.size,paused,overview,boundary:+boundaryWeight(player.x,player.z).q.toFixed(4),fps:Math.round(1000/frameMean),calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
   drawMap();
 }
 const windRelations=[['with','順風'],['cross','側風'],['against','逆風']],currentRelations=[['with','順流'],['cross','側流'],['against','逆流']];
@@ -434,7 +434,7 @@ function renderCombos(){let html='';for(const weather of ['sunny','windy']){html
 
 // Draw the exact height field once. Only arrows, currents and the player redraw.
 const mapCanvas=$('minimap'),mapCtx=mapCanvas.getContext('2d'),mapBase=document.createElement('canvas');mapBase.width=500;mapBase.height=340;const baseCtx=mapBase.getContext('2d');
-const mapScale=2.48,mapX=x=>250+x*mapScale,mapZ=z=>170+z*mapScale;
+const mapScale=Math.min(460/(2*LIMIT.x),300/(2*LIMIT.z)),mapX=x=>250+x*mapScale,mapZ=z=>170+z*mapScale;
 const mapData=baseCtx.createImageData(500,340);
 for(let z=0;z<340;z++)for(let x=0;x<500;x++){const xx=(x-250)/mapScale,zz=(z-170)/mapScale,h=terrainHeight(xx,zz),q=Math.hypot(xx/LIMIT.x,zz/LIMIT.z);let c=q>1?[222,235,216]:h<.12?[184,216,201]:h>1.8?[169,187,133]:h<.5?[218,214,168]:[230,213,165];const i=(z*500+x)*4;mapData.data.set([...c,255],i);}
 baseCtx.putImageData(mapData,0,0);baseCtx.strokeStyle='#93b69b';baseCtx.lineWidth=1;baseCtx.setLineDash([3,5]);baseCtx.beginPath();baseCtx.ellipse(250,170,LIMIT.x*mapScale*.985,LIMIT.z*mapScale*.985,0,0,Math.PI*2);baseCtx.stroke();baseCtx.setLineDash([]);
@@ -448,77 +448,80 @@ function drawMap(){const ctx=mapCtx;ctx.clearRect(0,0,500,340);ctx.drawImage(map
 
 const cameraTarget=new THREE.Vector3(),desiredCamera=new THREE.Vector3(),lookTarget=new THREE.Vector3();let cameraReady=false;
 function updateCamera(dt){
+  const surfing=player.tool==='surfboard';
   if(inspecting){const compact=canvas.clientWidth<700,focus=inspectDistance<2?1.57:compact?.45:.75,distance=inspectDistance*(compact&&inspectDistance>=2?1.22:1);desiredCamera.set(player.x+Math.sin(cameraYaw)*distance,player.y+focus+Math.sin(cameraPitch)*distance,player.z+Math.cos(cameraYaw)*distance);lookTarget.set(player.x,player.y+focus,player.z);}
   else if(overview){desiredCamera.set(0,133,74);lookTarget.set(0,0,-3);}
   else{
-    const sin=Math.sin(cameraYaw),cos=Math.cos(cameraYaw),distance=cameraDistance+Math.min(player.speed,14)*.055;
-    desiredCamera.set(player.x+sin*distance,player.y+2.2+Math.sin(cameraPitch)*distance,player.z+cos*distance);
-    desiredCamera.y=Math.max(desiredCamera.y,floorAt(desiredCamera.x,desiredCamera.z)+1.2);
-    lookTarget.set(player.x-sin*.8,player.y+1.10,player.z-cos*.8);
+    if(surfing&&!paused&&!dragging&&env.time-lastOrbit>4&&player.speed>2){let d=player.facing+.20-cameraYaw;d=Math.atan2(Math.sin(d),Math.cos(d));cameraYaw+=d*(1-Math.exp(-dt*3.3));}
+    const sin=Math.sin(cameraYaw),cos=Math.cos(cameraYaw),distance=surfing?cameraDistance*.79+Math.min(player.speed,24)*.025:cameraDistance+Math.min(player.speed,14)*.055;
+    const height=surfing?1.6:2.2;
+    desiredCamera.set(player.x+sin*distance,player.y+height+Math.sin(cameraPitch)*distance,player.z+cos*distance);
+    const sea=swellAt(desiredCamera.x,desiredCamera.z,env.time,env.weather).height;
+    desiredCamera.y=Math.max(desiredCamera.y,terrainHeight(desiredCamera.x,desiredCamera.z)+1.1,sea+.8);
+    const lead=surfing?1.65:.8;lookTarget.set(player.x-Math.sin(visibleYaw)*lead,player.y+(surfing?.88:1.10),player.z-Math.cos(visibleYaw)*lead);
     // Shorten the camera arm before it enters a tall solid rock.
     const ray=new THREE.Vector3().subVectors(desiredCamera,lookTarget),len=ray.length();ray.normalize();let safe=len;
     for(const o of OBSTACLES){if(o.type!=='rock')continue;const center=new THREE.Vector3(o.x,o.base+o.h*.5,o.z);const along=new THREE.Vector3().subVectors(center,lookTarget).dot(ray);if(along<.8||along>safe)continue;const closest=lookTarget.clone().addScaledVector(ray,along);const r=o.r+.4;if(closest.distanceTo(center)<r&&closest.y<o.top+.4)safe=Math.max(1.7,along-r);}
     if(safe<len)desiredCamera.copy(lookTarget).addScaledVector(ray,safe);
   }
-  const blend=1-Math.exp(-dt*(overview?3.2:6));if(!cameraReady){camera.position.copy(desiredCamera);cameraTarget.copy(lookTarget);cameraReady=true;}else{camera.position.lerp(desiredCamera,blend);cameraTarget.lerp(lookTarget,blend);}camera.lookAt(cameraTarget);const fov=inspecting?36:53;if(Math.abs(camera.fov-fov)>.01){camera.fov+=(fov-camera.fov)*blend;camera.updateProjectionMatrix();}
+  const blend=1-Math.exp(-dt*(overview?3.2:surfing?5:6));if(!cameraReady){camera.position.copy(desiredCamera);cameraTarget.copy(lookTarget);cameraReady=true;}else{camera.position.lerp(desiredCamera,blend);cameraTarget.lerp(lookTarget,blend);}camera.lookAt(cameraTarget);
+  if(surfing&&!inspecting&&!overview)camera.rotateZ((player.carve||0)*.025);
+  const fov=inspecting?36:surfing?54+Math.min(12,player.speed*.43)+(player.boosting?2:0):53;if(Math.abs(camera.fov-fov)>.01){camera.fov+=(fov-camera.fov)*blend;camera.updateProjectionMatrix();}
 }
 function animateAvatar(dt){
-  const moving=Math.min(1,player.speed/3),air=!player.grounded;
-  walkTime+=dt*(player.speed>1?player.speed*1.7:2);const stride=Math.sin(walkTime);
-  let diff=player.facing-visibleYaw;diff=Math.atan2(Math.sin(diff),Math.cos(diff));visibleYaw+=diff*(1-Math.exp(-dt*13));
-  avatar.position.set(player.x,player.y,player.z);avatar.rotation.y=visibleYaw;
-  bodyPivot.position.y=air?0:Math.abs(Math.sin(walkTime))*moving*.065;bodyPivot.rotation.x=air?-.1:-moving*.075;
-  for(const arm of arms){const phase=arm.side;arm.shoulder.rotation.x=air?-1.0:stride*.65*moving*phase;arm.shoulder.rotation.z=-arm.side*(.07+(air?.18:0));arm.elbow.rotation.x=-.55-(currentInput.sprint?.3:0);}
-  for(const leg of legs){const s=stride*leg.side;leg.hip.rotation.x=air?(leg.side<0?-.7:.5):s*.75*moving;leg.knee.rotation.x=air?.8:Math.max(0,-s)*1.12*moving;}
-  if(player.tool==='surfboard'){
-    bodyPivot.position.y=.16+(air?0:Math.sin(env.time*2)*.02);bodyPivot.rotation.x=-.09;
-    for(const leg of legs){leg.hip.rotation.x=-.2;leg.knee.rotation.x=.35;}
-    for(const arm of arms){arm.shoulder.rotation.x=.15;arm.shoulder.rotation.z=-arm.side*(.28+moving*.13);arm.elbow.rotation.x=-.35;}
-  }else if(player.tool==='jetski'){
-    bodyPivot.position.y=.10;bodyPivot.rotation.x=-.16;
-    for(const leg of legs){leg.hip.rotation.x=-.8;leg.knee.rotation.x=1.4;}
-    for(const arm of arms){arm.shoulder.rotation.x=.95;arm.shoulder.rotation.z=-arm.side*.08;arm.elbow.rotation.x=-.6;}
-    for(const skid of jetSkids)skid.visible=!player.water;
-  }
+  const surfing=player.tool==='surfboard';
+  let diff=player.facing-visibleYaw;diff=Math.atan2(Math.sin(diff),Math.cos(diff));visibleYaw+=diff*(1-Math.exp(-dt*(surfing?8:13)));
+  avatar.position.set(player.x,player.y-(surfing?.12:0),player.z);
+  const wave=swellAt(player.x,player.z,env.time,env.weather),forwardX=-Math.sin(visibleYaw),forwardZ=-Math.cos(visibleYaw);
+  const pitch=surfing?(player.grounded?Math.atan(wave.dx*forwardX+wave.dz*forwardZ):-.22)+((player.boosting||player.pump>0)?-.035:0):0;
+  const bank=surfing?-(player.carve||0)*.34*Math.min(1,player.speed/7):0;
+  avatar.rotation.set(pitch,visibleYaw,bank,'YXZ');avatar.updateMatrixWorld(true);
+  for(const skid of jetSkids)skid.visible=!player.water;
   detailedCharacter.update(dt,player,currentInput,env.time);
-  contactShadow.position.set(player.x,Math.max(.105,terrainHeight(player.x,player.z)+.025),player.z);contactShadow.scale.setScalar(1+Math.max(0,player.y-floorAt(player.x,player.z))*.25);contactShadow.material.opacity=player.water?.12:.17;
-  particleTimer+=dt;if(player.speed>1.4&&player.grounded&&particleTimer>.105){emitParticle(player);particleTimer=0;}updateParticles(dt);
+  contactShadow.visible=!player.water;contactShadow.position.set(player.x,terrainHeight(player.x,player.z)+.025,player.z);contactShadow.material.opacity=.15;
+  particleTimer+=dt;if(player.speed>1.4&&player.grounded&&!player.water&&particleTimer>.105){emitParticle(player);particleTimer=0;}updateParticles(dt);
+  surfEffects.update(dt,player,env,camera);
 }
 let lastTime=performance.now(),frameCount=0,frameMean=16,qualityTime=0;
 function frame(now){
   requestAnimationFrame(frame);const rawDt=(now-lastTime)/1000;lastTime=now;if(document.hidden)return;const dt=Math.min(.05,rawDt||.016);
   if(!paused){
-    env.time+=dt;
+    if(!inspecting)env.time+=dt;
     let sx=touchX+(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0),sz=touchZ+(keys.has('KeyS')||keys.has('ArrowDown')?1:0)-(keys.has('KeyW')||keys.has('ArrowUp')?1:0);
     if(inspecting){sx=0;sz=0;}
     const mag=Math.hypot(sx,sz);if(mag>1){sx/=mag;sz/=mag;}
     const yaw=overview?0:cameraYaw,co=Math.cos(yaw),si=Math.sin(yaw);
     currentInput={x:sx*co+sz*si,z:-sx*si+sz*co,sprint:sprintToggle||keys.has('ShiftLeft')||keys.has('ShiftRight'),jump:jumpQueued};
     const steps=Math.ceil(dt/(1/120)),step=dt/steps;
-    for(let i=0;i<steps;i++){stepPlayer(player,currentInput,env,step);currentInput.jump=false;}jumpQueued=false;
+    if(!inspecting)for(let i=0;i<steps;i++){
+      if(started&&player.tool==='surfboard'&&isWater(player.x,player.z))stepSurfer(player,{steer:sx,pump:Math.max(0,-sz),brake:Math.max(0,sz),sprint:currentInput.sprint,jump:currentInput.jump},env,step);
+      else{stepPlayer(player,currentInput,env,step);player.carve=(player.carve||0)*Math.exp(-step*17);player.pump=0;player.boosting=false;}
+      currentInput.jump=false;
+    }jumpQueued=false;
+    if(started&&!inspecting&&player.tool==='surfboard'&&player.water){currentInput.x=-Math.sin(player.facing);currentInput.z=-Math.cos(player.facing);currentInput.sprint=player.boosting;}
     const combo=comboKey(player,currentInput,env);if(combo===comboCandidate)comboDwell+=dt;else{comboCandidate=combo;comboDwell=0;}
-    if(combo&&comboDwell>.5&&!discovered.has(combo)){discovered.add(combo);if(discovered.size===1||discovered.size%4===0)toast(`新的跑法已記下 · ${discovered.size} / 24 種環境組合`);}
+    if(combo&&comboDwell>.5&&!discovered.has(combo)){discovered.add(combo);if(player.tool!=='surfboard'&&(discovered.size===1||discovered.size%4===0))toast(`新的跑法已記下 · ${discovered.size} / 24 種環境組合`);}
     weatherBlend+=(Number(env.weather==='windy')-weatherBlend)*(1-Math.exp(-dt*1.4));
     const targetSky=env.weather==='windy'?new THREE.Color('#b0cfd0'):new THREE.Color('#c5e5df');skyColor.lerp(targetSky,dt*.7);scene.background.copy(skyColor);scene.fog.color.copy(skyColor);waterMaterial.uniforms.uSky.value.copy(skyColor);
     sun.intensity=3-weatherBlend*.8;hemisphere.intensity=2.1-weatherBlend*.12;
-    waterMaterial.uniforms.uTime.value=env.time;waterMaterial.uniforms.uStorm.value=weatherBlend;waterMaterial.uniforms.uWind.value.set(Math.sin(env.windAngle),-Math.cos(env.windAngle));waterMaterial.uniforms.uReverse.value=env.reversed?-1:1;
+    waterMaterial.uniforms.uTime.value=env.time;waterMaterial.uniforms.uStorm.value=Number(env.weather==='windy');waterMaterial.uniforms.uWind.value.set(Math.sin(env.windAngle),-Math.cos(env.windAngle));waterMaterial.uniforms.uReverse.value=env.reversed?-1:1;
     const wind=windAt(env.weather,env.windAngle,env.time);
     for(const p of palmCrowns){const sway=(.007+weatherBlend*.065)*Math.sin(env.time*(.9+weatherBlend*.7)+p.phase);p.group.rotation.x=sway*Math.cos(env.windAngle);p.group.rotation.z=sway*Math.sin(env.windAngle);}
     for(const f of flags){const a=f.mesh.geometry.attributes.position;for(let i=0;i<a.count;i++){const x=f.base[i*3];a.setZ(i,Math.sin(x*7+env.time*(4+weatherBlend*7)+f.phase)*(.035+weatherBlend*.17)*(x+.55));}a.needsUpdate=true;f.mesh.rotation.y=Math.atan2(-wind.z,wind.x);}
     for(const c of clouds){c.position.x+=Math.sin(env.windAngle)*dt*(.12+weatherBlend*.7);c.position.z-=Math.cos(env.windAngle)*dt*(.12+weatherBlend*.7);if(c.position.x>280)c.position.x=-280;if(c.position.x< -280)c.position.x=280;if(c.position.z>280)c.position.z=-280;if(c.position.z< -280)c.position.z=280;}
-    for(const b of buoys)b.mesh.position.y=.25+Math.sin(env.time*1.5+b.phase*6)*(.05+weatherBlend*.06);
-    for(const a of flowArrows){const c=currentAt(a.x,a.z,env.reversed),shift=((env.time*c.strength*.28+a.phase)%3)-1.5;a.group.position.set(a.x+c.x*shift,.13,a.z+c.z*shift);a.group.rotation.y=-Math.atan2(c.x,-c.z);a.group.children[0].material.opacity=.16+Math.sin(env.time*1.5+a.phase)*.08;}
+    for(const b of buoys)b.mesh.position.y=swellAt(b.mesh.position.x,b.mesh.position.z,env.time,env.weather).height+.17;
+    for(const a of flowArrows){a.group.visible=drawerOpen;const c=currentAt(a.x,a.z,env.reversed),shift=((env.time*c.strength*.28+a.phase)%3)-1.5;a.group.position.set(a.x+c.x*shift,.13,a.z+c.z*shift);a.group.rotation.y=-Math.atan2(c.x,-c.z);}
     boat.position.y=.25+Math.sin(env.time*.9)*.09;boat.rotation.z=Math.sin(env.time*.8)*(.025+weatherBlend*.025);
     animateAvatar(dt);
     if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').classList.remove('visible');}
     const transition=advanceTerrainTracker(terrainTracker,terrainClass(player.x,player.z),dt,env.time,$('terrainPrompts').checked,started&&!inspecting&&player.grounded&&!document.querySelector('dialog[open]'));
-    if(transition)openEquipment(true);
+    if(transition){if(player.tool==='surfboard')toast(player.water?'回到浪上 · 繼續滑行':'靠近沙灘 · 按 E 選擇探索工具');else openEquipment(true);}
   }
   updateCamera(dt);hudTime+=dt;if(hudTime>.1){updateHUD();hudTime=0;}
   const span=inspecting?5.5:32;if(span!==lastShadowSpan){Object.assign(sun.shadow.camera,{left:-span,right:span,top:span,bottom:-span});sun.shadow.camera.updateProjectionMatrix();lastShadowSpan=span;}sun.shadow.normalBias=inspecting?.003:.014;sun.target.position.set(player.x,player.y+.8,player.z);sun.position.set(player.x-38,player.y+78,player.z-42);
-  renderer.render(scene,camera);
+  surfAudio.update(player,env.time,paused||inspecting);renderer.render(scene,camera);
   frameMean=frameMean*.97+Math.min(rawDt*1000,100)*.03;qualityTime+=dt;if(qualityTime>7&&frameMean>31&&renderer.getPixelRatio()>1){renderer.setPixelRatio(1);renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);qualityTime=0;}
-  frameCount++;if(frameCount>=3&&characterSettled&&$('loading')&&!$('loading').classList.contains('loaded')){$('loading').classList.add('loaded');setTimeout(()=>$('loading')?.remove(),800);}
+  frameCount++;if(frameCount>=3&&characterSettled&&detailedCharacter.ready&&$('loading')&&!$('loading').classList.contains('loaded')){$('loading').classList.add('loaded');setTimeout(()=>$('loading')?.remove(),800);}
 }
 window.addEventListener('resize',()=>{camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix();renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);});
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();paused=true;toast('3D 畫面暫停，請重新整理以回到小島。');});
@@ -527,5 +530,5 @@ applyToolVisuals();animateAvatar(0);updateHUD();updateCamera(.1);requestAnimatio
 // Read-only diagnostics for meaningful verification. No test action is enabled on the Site.
 window.sunshore=Object.freeze({
   snapshot:()=>({position:{x:player.x,y:player.y,z:player.z},speed:player.speed,surface:player.water?'water':'sand',grounded:player.grounded,collision:player.collision,weather:env.weather,windAngle:env.windAngle,reversed:env.reversed,boundary:boundaryWeight(player.x,player.z),combos:discovered.size,paused,overview,render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()},fpsEstimate:Math.round(1000/frameMean)}),
-  version:'1.2.0'
+  version:'2.0.0'
 });

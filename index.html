@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#eaf1e8">
-  <meta name="description" content="一座小島，二十四種風與流的相遇。自由衝刺於沙灘與水面，探索陽光小島的第三人稱遊戲。">
+  <meta name="description" content="追浪、壓板、切浪、躍起。以衝浪為核心的第三人稱小島遊戲。">
   <title>逐浪小島 · Sunshore</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23203f40'/%3E%3Ccircle cx='32' cy='25' r='11' fill='%23e9ca7b'/%3E%3Cpath d='M10 43q11-12 22 0t22 0M10 51q11-12 22 0t22 0' fill='none' stroke='%2394d6c1' stroke-width='4'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css">
@@ -28,11 +28,11 @@
     <div class="environment-foot"><span id="weatherNote">微風、平緩的浪，適合出發。</span></div>
   </aside>
   <section class="intro" id="intro">
-    <p class="eyebrow">A LITTLE ISLAND. ENDLESS WAYS TO RUN.</p>
-    <h2>跟著風，<br>跑向海。</h2>
-    <p>從柔軟沙灘，到透亮水面。<br>每一次轉向，都有不一樣的速度。</p>
-    <button id="startButton" class="start-button">開始探索 <span>↗</span></button>
-    <span class="intro-note">自由跑動 · 沒有倒數 · 按 W 也能出發</span>
+    <p class="eyebrow">CHASE THE SWELL. FIND YOUR LINE.</p>
+    <h2>浪來了，<br>就出發。</h2>
+    <p>壓低重心，沿著浪面畫出你的弧線。<br>沒有倒數，只有下一道浪。</p>
+    <button id="startButton" class="start-button">開始衝浪 <span>↗</span></button>
+    <button id="roamButton" class="roam-button">漫遊小島</button><span class="intro-note">A / D 切浪 · W 壓板 · Shift 加速 · Space 躍起</span>
   </section>
   <div id="location" class="location-pill glass"><span class="location-dot"></span><span id="locationName">南岸沙灘</span><small id="surfaceName">沙灘</small></div>
   <div id="edgeNotice" class="edge-notice" hidden>已接近邊界，向外移動會逐漸減速。<br><small>轉向島內，即可繼續跑動。</small></div>
@@ -49,13 +49,13 @@
     <section class="map-panel glass" aria-label="全島小地圖">
       <div class="map-top"><span class="eyebrow">ISLAND EXPLORER</span><button id="overviewButton" aria-label="切換俯瞰全島" aria-pressed="false">俯瞰全島 <span>↗</span></button></div>
       <div class="map-wrap"><canvas id="minimap" width="500" height="340" aria-label="小島地圖，顯示沙灘、水域、障礙物和角色位置"></canvas><span class="map-north">N ↑</span><div class="map-scale"><span></span>20 m</div></div>
-      <div class="zone-buttons" role="group" aria-label="快速前往體驗區"><button data-zone="beach" class="selected">沙灘</button><button data-zone="lagoon">水面</button><button data-zone="obstacles">障礙區</button><button data-zone="current">急流</button></div>
+      <div class="zone-buttons" role="group" aria-label="快速前往體驗區"><button data-zone="surf" class="selected">浪線</button><button data-zone="beach">沙灘</button><button data-zone="lagoon">水面</button><button data-zone="obstacles">障礙區</button><button data-zone="current">急流</button></div>
       <button class="discoveries" id="discoveryButton"><span><i class="discovery-dot"></i>已體驗的環境組合</span><b><span id="comboCount">0</span><small>/ 24</small> ↗</b></button>
     </section>
   </footer>
   <div class="touch-controls"><div id="joystick" class="joystick" aria-label="觸控移動搖桿"><div id="joystickKnob"></div></div><div class="touch-actions"><button id="touchSprint" aria-pressed="false">衝刺</button><button id="touchJump" aria-label="跳躍">↥</button></div></div>
-  <dialog id="helpDialog" class="dialog glass"><button class="dialog-close" data-close="helpDialog" aria-label="關閉操作說明">×</button><span class="eyebrow">FIND YOUR FLOW</span><h2>小島怎麼玩</h2><p>用方向改變速度，用跳躍越過漂流木。<br>主角會直接在水面奔跑，靠近岸邊就會切換地形。</p><div class="help-grid"><span><kbd>W A S D</kbd> 或方向鍵</span><b>移動</b><span><kbd>Shift</kbd></span><b>持續衝刺</b><span><kbd>Space</kbd></span><b>跳過低障礙</b><span>拖曳畫面 / 滾輪</span><b>轉動 / 拉近視角</b><span><kbd>E</kbd> / <kbd>C</kbd></span><b>選擇工具 / 近看人物</b><span><kbd>R</kbd> / <kbd>Esc</kbd></span><b>回到沙灘 / 暫停</b></div><p class="help-note">手機使用左側搖桿移動、右側按鈕衝刺與跳躍，拖曳空白處調整視角。地形切換時可選擇衝浪板、水上摩托車或外骨骼，也能按 E 隨時換裝。水上摩托車可跨低漂流木，外骨骼可跨 1.05 m 以下障礙；高礁石仍需繞行。</p><button class="primary-button" data-close="helpDialog">出發吧 ↗</button></dialog>
-  <dialog id="pauseDialog" class="dialog glass small-dialog"><span class="eyebrow">TAKE A BREATH</span><h2>在海邊，慢一點。</h2><p>小島正在等你。</p><button id="resumeButton" class="primary-button">繼續探索 ↗</button><button id="resetButton" class="text-button">回到南岸起點</button></dialog>
+  <dialog id="helpDialog" class="dialog glass"><button class="dialog-close" data-close="helpDialog" aria-label="關閉操作說明">×</button><span class="eyebrow">FIND YOUR FLOW</span><h2>沿著浪，找到節奏</h2><p>A / D 以弧線切浪，放開按鍵仍會滑行。<br>按 W 壓低重心沿浪加速，S 放慢速度，Shift 消耗能量爆發，Space 躍起。</p><div class="help-grid"><span><kbd>A / D</kbd> · <kbd>W / S</kbd></span><b>切浪 · 壓板 / 減速</b><span><kbd>Shift</kbd></span><b>爆發加速</b><span><kbd>Space</kbd></span><b>跳浪</b><span>拖曳畫面 / 滾輪</span><b>轉動 / 拉近視角</b><span><kbd>E</kbd> / <kbd>C</kbd></span><b>選擇工具 / 近看人物</b><span><kbd>R</kbd> / <kbd>Esc</kbd></span><b>回到浪線 / 暫停</b><span><kbd>H</kbd> / <kbd>F</kbd></span><b>隱藏介面 / 定格拍照</b></div><p class="help-note">手機使用左側搖桿移動、右側按鈕衝刺與跳躍，拖曳空白處調整視角。地形切換時可選擇衝浪板、水上摩托車或外骨骼，也能按 E 隨時換裝。水上摩托車可跨低漂流木，外骨骼可跨 1.05 m 以下障礙；高礁石仍需繞行。</p><button class="primary-button" data-close="helpDialog">出發吧 ↗</button></dialog>
+  <dialog id="pauseDialog" class="dialog glass small-dialog"><span class="eyebrow">TAKE A BREATH</span><h2>在海邊，慢一點。</h2><p>小島正在等你。</p><button id="resumeButton" class="primary-button">繼續探索 ↗</button><button id="resetButton" class="text-button">回到浪線</button></dialog>
   <dialog id="discoveryDialog" class="dialog glass discovery-dialog"><button class="dialog-close" data-close="discoveryDialog" aria-label="關閉環境組合">×</button><span class="eyebrow">THE WAY THE ISLAND MOVES</span><h2>收集不同的跑法</h2><p>持續跑動半秒，即記下當下組合。<br>在晴天和大風中轉向，體驗順風、側風與逆風；水面再搭配三種流向。</p><div id="comboGrid"></div><div class="combo-legend"><span>● 已體驗</span><span>○ 尚未體驗</span></div></dialog>
   <dialog id="equipmentDialog" class="dialog glass equipment-dialog" aria-labelledby="equipmentTitle">
     <button class="dialog-close" data-close="equipmentDialog" aria-label="關閉工具選擇">×</button>
@@ -92,10 +92,23 @@
   <section id="characterControls" class="character-controls glass" aria-label="人物細節檢視" hidden>
     <div><span class="eyebrow">UP CLOSE</span><strong>人物細節</strong><small id="characterState">正在載入精緻人物</small></div>
     <div class="character-views"><button id="faceView">臉部近看</button><button id="bodyView">全身與裝備</button></div>
-    <div class="character-quality" role="group" aria-label="人物精緻度比較"><button id="detailedCharacter" aria-pressed="true">精緻角色</button><button id="classicCharacter" aria-pressed="false">輕量角色</button></div>
     <p>拖曳旋轉 · 滾輪拉近<br><small>按 E 可看裝備姿勢，按 C 或 Esc 回到遊戲</small></p>
     <button id="exitCharacter" class="character-return">回到小島 ↗</button>
   </section>
+
+  <nav class="session-actions" aria-label="遊戲快捷操作">
+    <button id="restartSurf" title="回到浪線（R）" aria-label="重新開始衝浪">↻</button>
+    <button id="photoButton" title="定格拍照（F）" aria-label="定格拍照"><svg viewBox="0 0 24 24"><path d="M3 7h4l2-3h6l2 3h4v13H3z"/><circle cx="12" cy="13" r="4"/></svg></button>
+    <button id="islandMenuToggle" aria-controls="islandDrawer" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>探索</span></button>
+  </nav>
+  <aside id="islandDrawer" class="island-drawer glass" aria-label="探索與設定" hidden>
+    <div class="drawer-title"><div><span class="eyebrow">YOUR ISLAND</span><strong>探索與設定</strong></div><button id="closeDrawer" aria-label="關閉探索選單">×</button></div>
+    <button id="surfFromDrawer" class="drawer-surf">回到浪線，繼續衝浪 ↗</button>
+    <button id="soundToggle" class="sound-toggle" aria-pressed="true">海浪聲 · 開啟</button>
+  </aside>
+  <div id="rideHUD" class="ride-hud" aria-label="衝浪即時狀態"><span class="ride-speed"><b id="rideSpeed">0</b><small>km/h</small></span><span class="ride-caption"><span id="rideState">等待下一道浪</span><span class="flow-meter" aria-label="加速能量"><i id="flowEnergy"></i></span></span><button id="quickTool" aria-label="選擇工具">◇</button></div>
+  <div class="surf-hint" id="surfHint">A / D 切浪 <i>·</i> W 壓板 <i>·</i> Shift 加速 <i>·</i> Space 跳浪 <span>M 選單 · H 純畫面 · F 拍照</span></div>
+  <button id="restoreUI" class="restore-ui" hidden>顯示介面 · H</button>
   <div id="loading" class="loading"><div class="loading-mark">☀</div><span>讓海風準備好…</span><small id="loadingDetail">正在建立逐浪小島</small></div>
   <script type="module" src="./game.js"></script>
 </body>

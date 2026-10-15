@@ -1,12 +1,12 @@
 {
   "name": "sunshore-island",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "A third-person island running game with wind, currents and a finite soft boundary.",
   "scripts": {
-    "test": "node tests/physics.mjs && node tests/character.mjs",
-    "check": "node --check game.js && node --check island.js && node --check character.js"
+    "test": "node tests/physics.mjs && node tests/character.mjs && node tests/surf.mjs",
+    "check": "node --check game.js && node --check island.js && node --check character.js && node --check surf-effects.js && node --check surf-audio.js"
   },
   "engines": {
     "node": ">=18"
