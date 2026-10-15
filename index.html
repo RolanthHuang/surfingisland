@@ -18,7 +18,7 @@
       <button id="sunny" class="weather active" aria-pressed="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><span>晴天</span></button>
       <button id="windy" class="weather" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M3 8h12a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h6a2 2 0 1 1-2 2"/></svg><span>刮大風</span></button>
     </div>
-    <div class="top-actions"><button id="environmentToggle" class="icon-button glass" aria-label="風與水流設定" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M9 4v6m6 4v6"/></svg></button><button id="helpButton" class="icon-button glass" aria-label="操作說明">?</button><button id="pauseButton" class="icon-button glass" aria-label="暫停"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button></div>
+    <div class="top-actions"><button id="toolButton" class="icon-button glass" aria-label="選擇移動工具，目前徒步" title="選擇工具（E）"><svg viewBox="0 0 24 24"><path d="m14 4 6 6-9 9-6-6zM5 13l-2 7 7-2M14 4l3-1 4 4-1 3"/></svg></button><button id="environmentToggle" class="icon-button glass" aria-label="風與水流設定" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M9 4v6m6 4v6"/></svg></button><button id="helpButton" class="icon-button glass" aria-label="操作說明">?</button><button id="pauseButton" class="icon-button glass" aria-label="暫停"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button></div>
   </header>
   <aside class="environment glass" id="environment" aria-label="風向與水流控制">
     <div class="panel-heading"><span class="eyebrow">ISLAND CONDITIONS</span><span class="live-dot">即時環境</span></div>
@@ -42,7 +42,8 @@
       <div class="speed-heading"><span class="eyebrow">YOUR PACE</span><span class="running-state" id="runningState">準備出發</span></div>
       <div class="speed-value"><span id="speed">0.0</span><div><b>m/s</b><small id="paceLabel">沙灘跑動</small></div><svg class="speed-spark" viewBox="0 0 90 36"><path id="speedPath" d="M0 32H90"/></svg></div>
       <div class="speed-bar"><span id="speedBar"></span></div>
-      <div class="speed-factors"><div><span>地形基速</span><b id="baseEffect">6.0</b></div><div><span>風的影響</span><b id="windEffect">—</b></div><div><span>水流影響</span><b id="currentEffect">—</b></div></div>
+      <div class="speed-factors"><div><span id="baseLabel">地形基速</span><b id="baseEffect">6.0</b></div><div><span>風的影響</span><b id="windEffect">—</b></div><div><span>水流影響</span><b id="currentEffect">—</b></div></div>
+      <button id="equipmentStatus" class="equipment-status" aria-label="開啟工具選擇"><span><i>◇</i> <b id="equipmentName">徒步</b></span><small id="equipmentBonus">選擇工具 ↗</small></button>
     </section>
     <div class="controls-hint glass"><div><kbd>W</kbd><span class="arrows-row"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span></div><span>移動</span><i></i><kbd>Shift</kbd><span>衝刺</span><i></i><kbd>Space</kbd><span>跳躍</span><i></i><span class="mouse-icon">◉</span><span>拖曳轉視角</span></div>
     <section class="map-panel glass" aria-label="全島小地圖">
@@ -53,9 +54,41 @@
     </section>
   </footer>
   <div class="touch-controls"><div id="joystick" class="joystick" aria-label="觸控移動搖桿"><div id="joystickKnob"></div></div><div class="touch-actions"><button id="touchSprint" aria-pressed="false">衝刺</button><button id="touchJump" aria-label="跳躍">↥</button></div></div>
-  <dialog id="helpDialog" class="dialog glass"><button class="dialog-close" data-close="helpDialog" aria-label="關閉操作說明">×</button><span class="eyebrow">FIND YOUR FLOW</span><h2>小島怎麼玩</h2><p>用方向改變速度，用跳躍越過漂流木。<br>主角會直接在水面奔跑，靠近岸邊就會切換地形。</p><div class="help-grid"><span><kbd>W A S D</kbd> 或方向鍵</span><b>移動</b><span><kbd>Shift</kbd></span><b>持續衝刺</b><span><kbd>Space</kbd></span><b>跳過低障礙</b><span>拖曳畫面 / 滾輪</span><b>轉動 / 拉近視角</b><span><kbd>R</kbd> / <kbd>Esc</kbd></span><b>回到沙灘 / 暫停</b></div><p class="help-note">手機使用左側搖桿移動、右側按鈕衝刺與跳躍，拖曳空白處調整視角。高礁石需要繞過；邊界會柔和減速，轉身即可離開。</p><button class="primary-button" data-close="helpDialog">出發吧 ↗</button></dialog>
+  <dialog id="helpDialog" class="dialog glass"><button class="dialog-close" data-close="helpDialog" aria-label="關閉操作說明">×</button><span class="eyebrow">FIND YOUR FLOW</span><h2>小島怎麼玩</h2><p>用方向改變速度，用跳躍越過漂流木。<br>主角會直接在水面奔跑，靠近岸邊就會切換地形。</p><div class="help-grid"><span><kbd>W A S D</kbd> 或方向鍵</span><b>移動</b><span><kbd>Shift</kbd></span><b>持續衝刺</b><span><kbd>Space</kbd></span><b>跳過低障礙</b><span>拖曳畫面 / 滾輪</span><b>轉動 / 拉近視角</b><span><kbd>E</kbd></span><b>選擇移動工具</b><span><kbd>R</kbd> / <kbd>Esc</kbd></span><b>回到沙灘 / 暫停</b></div><p class="help-note">手機使用左側搖桿移動、右側按鈕衝刺與跳躍，拖曳空白處調整視角。地形切換時可選擇衝浪板、水上摩托車或外骨骼，也能按 E 隨時換裝。水上摩托車可跨低漂流木，外骨骼可跨 1.05 m 以下障礙；高礁石仍需繞行。</p><button class="primary-button" data-close="helpDialog">出發吧 ↗</button></dialog>
   <dialog id="pauseDialog" class="dialog glass small-dialog"><span class="eyebrow">TAKE A BREATH</span><h2>在海邊，慢一點。</h2><p>小島正在等你。</p><button id="resumeButton" class="primary-button">繼續探索 ↗</button><button id="resetButton" class="text-button">回到南岸起點</button></dialog>
   <dialog id="discoveryDialog" class="dialog glass discovery-dialog"><button class="dialog-close" data-close="discoveryDialog" aria-label="關閉環境組合">×</button><span class="eyebrow">THE WAY THE ISLAND MOVES</span><h2>收集不同的跑法</h2><p>持續跑動半秒，即記下當下組合。<br>在晴天和大風中轉向，體驗順風、側風與逆風；水面再搭配三種流向。</p><div id="comboGrid"></div><div class="combo-legend"><span>● 已體驗</span><span>○ 尚未體驗</span></div></dialog>
+  <dialog id="equipmentDialog" class="dialog glass equipment-dialog" aria-labelledby="equipmentTitle">
+    <button class="dialog-close" data-close="equipmentDialog" aria-label="關閉工具選擇">×</button>
+    <span class="eyebrow">A LITTLE HELP, A NEW WAY TO GO</span>
+    <h2 id="equipmentTitle">這一段路，想怎麼走？</h2>
+    <p id="equipmentContext">裝備會自動適應沙灘與水面，換地形也能繼續使用。</p>
+    <div class="tool-grid">
+      <button class="tool-card" data-tool="surfboard" aria-label="使用衝浪板" aria-pressed="false">
+        <span class="tool-art surf-art" aria-hidden="true"><svg viewBox="0 0 100 70"><path d="M50 5C28 12 19 49 25 61c14 5 49-12 56-36C70 11 60 7 50 5Z" fill="#e9dec0" stroke="#789e85" stroke-width="1.2"/><path d="M31 55 66 16" stroke="#538b79" stroke-width="6"/><path d="m44 41 9-11" stroke="#d4ab63" stroke-width="7"/></svg></span>
+        <span class="tool-card-title">衝浪板 <small class="recommend-tag" hidden>推薦</small></span>
+        <span class="tool-description">沙灘滑行，順流逐浪<br>借順流加速、減少逆流阻力</span>
+        <span class="tool-speeds"><span>沙灘 <b>7.2 / 11.2</b></span><span>水面 <b>8.2 / 13.2</b></span></span>
+        <span class="tool-choose">裝備衝浪板 ↗</span>
+      </button>
+      <button class="tool-card" data-tool="jetski" aria-label="使用水上摩托車" aria-pressed="false">
+        <span class="tool-art jet-art" aria-hidden="true"><svg viewBox="0 0 100 70"><path d="m10 43 35-18 43 8-9 19-47 5Z" fill="#dba17e"/><path d="m19 39 28-10 32 6-14 9Z" fill="#f3ead0"/><path d="m42 25 15-7 17 14-20 4Z" fill="#6e9c88"/><path d="m43 27 4-12m-9 0h18" fill="none" stroke="#496b60" stroke-width="3"/><path d="M14 61q13-7 26-1t28-1" stroke="#94bca6" stroke-width="2" fill="none"/></svg></span>
+        <span class="tool-card-title">水上摩托車 <small class="recommend-tag" hidden>推薦</small></span>
+        <span class="tool-description">沙灘氣墊，水面高速推進<br>抵抗逆流、自動跨過低漂流木</span>
+        <span class="tool-speeds"><span>沙灘 <b>8.0 / 12.0</b></span><span>水面 <b>12.0 / 18.0</b></span></span>
+        <span class="tool-choose">裝備水上摩托車 ↗</span>
+      </button>
+      <button class="tool-card" data-tool="exoskeleton" aria-label="使用外骨骼助行器" aria-pressed="false">
+        <span class="tool-art exo-art" aria-hidden="true"><svg viewBox="0 0 100 70"><circle cx="50" cy="11" r="6" fill="#c7b28b"/><path d="m39 21 21-1 5 21-15 6-14-7Z" fill="#a7baa1"/><path d="m38 23-11 17m33-17 14 17M42 44l-8 18m23-18 9 18" fill="none" stroke="#678779" stroke-width="7" stroke-linecap="round"/><path d="M46 24v13m-12 22h-7m40 0h7" stroke="#e3d39d" stroke-width="5"/><circle cx="38" cy="48" r="4" fill="#d6ddaa"/><circle cx="61" cy="49" r="4" fill="#d6ddaa"/></svg></span>
+        <span class="tool-card-title">外骨骼助行器 <small class="recommend-tag" hidden>推薦</small></span>
+        <span class="tool-description">陸地快步，水面助行<br>自動跨 1.05 m 障礙、跳得更高</span>
+        <span class="tool-speeds"><span>沙灘 <b>9.0 / 14.0</b></span><span>水面 <b>7.6 / 11.6</b></span></span>
+        <span class="tool-choose">裝備外骨骼 ↗</span>
+      </button>
+    </div>
+    <p class="tool-speed-note">速度為一般移動 / 衝刺的基速，單位 m/s；風向與水流會再影響實際速度。</p>
+    <div class="equipment-footer"><button id="keepTool" class="primary-button">繼續使用徒步</button><button class="on-foot-button" data-tool="foot" aria-label="改用徒步" aria-pressed="true">改用徒步</button></div>
+    <label class="terrain-prompt-option"><input id="terrainPrompts" type="checkbox" checked>地形改變時提醒我 <small>也可以隨時按 E 或點 ◇ 選擇</small></label>
+  </dialog>
   <div id="loading" class="loading"><div class="loading-mark">☀</div><span>讓海風準備好…</span><small id="loadingDetail">正在建立逐浪小島</small></div>
   <script type="module" src="./game.js"></script>
 </body>

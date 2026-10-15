@@ -1,5 +1,11 @@
 export const LIMIT = { x: 80, z: 64, soft: .85 };
 export const WEATHER = { sunny: { speed: 1.8, label: '晴天' }, windy: { speed: 12, label: '刮大風' } };
+export const TOOLS = {
+  foot: { name: '徒步', sand: [6, 10], water: [5.4, 9], wind: .25, currentWith: 1, currentAgainst: 1, drift: .12, step: 0, jump: 7.2, verb: '跑動' },
+  surfboard: { name: '衝浪板', sand: [7.2, 11.2], water: [8.2, 13.2], wind: .22, currentWith: 1.16, currentAgainst: .6, drift: .07, step: .38, jump: 7.6, verb: '滑行' },
+  jetski: { name: '水上摩托車', sand: [8, 12], water: [12, 18], wind: .14, currentWith: .35, currentAgainst: .35, drift: .035, step: .76, jump: 7.2, verb: '推進' },
+  exoskeleton: { name: '外骨骼助行器', sand: [9, 14], water: [7.6, 11.6], wind: .18, currentWith: .65, currentAgainst: .65, drift: .055, step: 1.05, jump: 8.4, verb: '助行' }
+};
 export const ZONES = {
   beach: { x: -9, z: 25, label: '南岸沙灘', yaw: .15 },
   lagoon: { x: 9, z: -3, label: '透光潟湖', yaw: -.55 },
@@ -76,6 +82,23 @@ export const PALMS = [
   [5, 21], [2, 28], [-10, -8], [-7, -16], [-32, -20], [26, -14]
 ].map(([x, z], i) => ({ x, z, h: 5 + rand() * 3.4, lean: .2 + rand() * .6, angle: rand() * Math.PI * 2, seed: i }));
 for (const palm of PALMS) add({ type: 'palm', x: palm.x, z: palm.z, r: .30, h: palm.h });
+export function terrainClass(x, z) {
+  if (isWater(x, z)) return 'water';
+  return OBSTACLES.some(o => o.type !== 'palm' && Math.hypot(x-o.x, z-o.z) < (o.r || Math.max(o.width,o.depth)/2)+3.3) ? 'obstacle' : 'sand';
+}
+export function recommendedTool(terrain, x, z) {
+  return terrain === 'water' ? (currentAt(x,z).strength >= 2.8 ? 'jetski' : 'surfboard') : 'exoskeleton';
+}
+export function makeTerrainTracker(initial = 'sand') { return { stable: initial, candidate: initial, dwell: 0, lastPrompt: -100 }; }
+export function advanceTerrainTracker(tracker, terrain, dt, time, enabled = true, canPrompt = true) {
+  if (tracker.candidate !== terrain) { tracker.candidate = terrain; tracker.dwell = 0; }
+  else tracker.dwell += dt;
+  if (tracker.dwell < .7 || tracker.stable === terrain) return null;
+  tracker.stable = terrain;
+  if (!enabled || !canPrompt || time - tracker.lastPrompt < 12) return null;
+  tracker.lastPrompt = time;
+  return terrain;
+}
 export function overlap(x, z, radius, o) {
   if (o.r) {
     const dx = x - o.x, dz = z - o.z, dist = Math.hypot(dx, dz), penetration = o.r + radius - dist;
@@ -94,7 +117,7 @@ export function overlap(x, z, radius, o) {
 }
 export function makePlayer(zone = 'beach') {
   const p = ZONES[zone];
-  return { x: p.x, z: p.z, y: floorAt(p.x, p.z), vx: 0, vz: 0, vy: 0, grounded: true, facing: Math.PI, speed: 0, base: 6, windEffect: 0, currentEffect: 0, water: isWater(p.x, p.z), collision: false };
+  return { x: p.x, z: p.z, y: floorAt(p.x, p.z), vx: 0, vz: 0, vy: 0, grounded: true, facing: Math.PI, speed: 0, base: 6, windEffect: 0, currentEffect: 0, water: isWater(p.x, p.z), collision: false, tool: 'foot', toolBonus: 0 };
 }
 export function stepPlayer(p, input, env, dt) {
   const water = isWater(p.x, p.z), m = Math.hypot(input.x, input.z), moving = m > .025;
@@ -102,20 +125,22 @@ export function stepPlayer(p, input, env, dt) {
   const n = Math.hypot(ix, iz), ux = n > 0 ? ix / n : 0, uz = n > 0 ? iz / n : 0;
   const w = windAt(env.weather, env.windAngle, env.time);
   const flow = currentAt(p.x, p.z, env.reversed);
-  const base = water ? (input.sprint ? 9 : 5.4) : (input.sprint ? 10 : 6);
-  const windEffect = moving ? (ux * w.x + uz * w.z) * w.strength * .25 : 0;
-  const currentEffect = water && p.grounded && moving ? (ux * flow.x + uz * flow.z) * flow.strength * .9 : 0;
+  const tool = TOOLS[p.tool] || TOOLS.foot, surface = water ? 'water' : 'sand', sprintIndex = input.sprint ? 1 : 0, wasGrounded = p.grounded;
+  const base = tool[surface][sprintIndex];
+  const windEffect = moving ? (ux * w.x + uz * w.z) * w.strength * tool.wind : 0;
+  const flowDot = ux * flow.x + uz * flow.z;
+  const currentEffect = water && p.grounded && moving ? flowDot * flow.strength * .9 * (flowDot >= 0 ? tool.currentWith : tool.currentAgainst) : 0;
   const pace = Math.max(1.8, base + windEffect + currentEffect);
   let tx = ix * pace, tz = iz * pace;
   if (water && moving && p.grounded) {
     const along = flow.x * ux + flow.z * uz;
-    tx += (flow.x - along * ux) * flow.strength * .12;
-    tz += (flow.z - along * uz) * flow.strength * .12;
+    tx += (flow.x - along * ux) * flow.strength * tool.drift;
+    tz += (flow.z - along * uz) * flow.strength * tool.drift;
   }
   const target = softenOutward(tx, tz, p.x, p.z), blend = 1 - Math.exp(-(moving ? 9 : 11) * dt);
   p.vx += (target.x - p.vx) * blend; p.vz += (target.z - p.vz) * blend;
   if (!moving && Math.hypot(p.vx, p.vz) < .025) { p.vx = 0; p.vz = 0; }
-  if (input.jump && p.grounded) { p.vy = 7.2; p.grounded = false; }
+  if (input.jump && p.grounded) { p.vy = tool.jump; p.grounded = false; }
   const oldY = p.y;
   p.vy -= 18 * dt; p.y += p.vy * dt;
   p.x += p.vx * dt; p.z += p.vz * dt;
@@ -125,6 +150,7 @@ export function stepPlayer(p, input, env, dt) {
     const hit = overlap(p.x, p.z, .34, o);
     if (!hit || p.y + 1.85 <= o.base) continue;
     if (o.type !== 'palm' && p.vy <= 0 && oldY >= o.top - .12) { support = Math.max(support, o.top); continue; }
+    if (o.type !== 'palm' && wasGrounded && moving && p.vy <= 0 && o.top - oldY <= tool.step && o.h <= tool.step && oldY >= o.base - .12) { support = Math.max(support, o.top); continue; }
     if (p.y >= o.top - .04) continue;
     p.x += hit.nx * (hit.depth + .001); p.z += hit.nz * (hit.depth + .001);
     const into = Math.min(0, p.vx * hit.nx + p.vz * hit.nz);
@@ -135,7 +161,7 @@ export function stepPlayer(p, input, env, dt) {
   else p.grounded = false;
   const q = Math.hypot(p.x / LIMIT.x, p.z / LIMIT.z);
   if (q > .9998) { p.x *= .9998 / q; p.z *= .9998 / q; }
-  p.speed = Math.hypot(p.vx, p.vz); p.base = base; p.windEffect = windEffect; p.currentEffect = currentEffect; p.water = water;
+  p.speed = Math.hypot(p.vx, p.vz); p.base = base; p.toolBonus = base - TOOLS.foot[surface][sprintIndex]; p.windEffect = windEffect; p.currentEffect = currentEffect; p.water = water;
   if (moving) p.facing = Math.atan2(-ux, -uz);
   return p;
 }

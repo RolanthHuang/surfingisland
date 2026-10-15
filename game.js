@@ -1,5 +1,5 @@
 import * as THREE from './vendor/three.module.min.js';
-import { LIMIT, ZONES, PALMS, OBSTACLES, clamp, smooth, seeded, terrainHeight, floorAt, isWater, currentAt, windAt, boundaryWeight, makePlayer, stepPlayer, comboKey } from './island.js';
+import { LIMIT, ZONES, PALMS, OBSTACLES, TOOLS, terrainClass, recommendedTool, makeTerrainTracker, advanceTerrainTracker, clamp, smooth, seeded, terrainHeight, floorAt, isWater, currentAt, windAt, boundaryWeight, makePlayer, stepPlayer, comboKey } from './island.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('world');
@@ -272,6 +272,29 @@ for(const side of [-1,1]){
 }
 const contactShadow=mesh(new THREE.CircleGeometry(.55,24),new THREE.MeshBasicMaterial({color:'#466b5d',transparent:true,opacity:.18,depthWrite:false}),0,.01,0,scene,false);contactShadow.rotation.x=-Math.PI/2;contactShadow.renderOrder=3;
 
+// Equipment has visible geometry as well as distinct movement rules.
+const surfRig=new THREE.Group();avatar.add(surfRig);
+const surfDeck=mesh(new THREE.SphereGeometry(1,18,10),materials.white,0,.11,0,surfRig);surfDeck.scale.set(.4,.085,1.4);
+box(.14,.018,2.15,materials.teal,0,.195,0,surfRig);box(.15,.02,.35,materials.gold,0,.20,-.9,surfRig);
+const surfFin=box(.025,.22,.24,materials.teal,0,-.03,.85,surfRig);
+const jetRig=new THREE.Group();avatar.add(jetRig);
+const jetHull=mesh(new THREE.SphereGeometry(1,16,8),materials.coral,0,.25,-.1,jetRig);jetHull.scale.set(.58,.26,1.38);
+const jetDeck=mesh(new THREE.SphereGeometry(1,16,8),materials.white,0,.42,-.16,jetRig);jetDeck.scale.set(.49,.18,1.20);
+box(.4,.17,.83,materials.dark,0,.63,.20,jetRig);
+const jetHood=mesh(new THREE.SphereGeometry(1,12,7),materials.teal,0,.62,-.67,jetRig);jetHood.scale.set(.37,.25,.55);
+lineBetween(new THREE.Vector3(0,.62,-.60),new THREE.Vector3(0,1.03,-.45),.045,materials.dark,jetRig);
+lineBetween(new THREE.Vector3(-.34,1.03,-.45),new THREE.Vector3(.34,1.03,-.45),.045,materials.dark,jetRig);
+const jetSkids=[];for(const side of [-1,1]){const skid=box(.12,.12,1.55,materials.gold,side*.46,.08,.12,jetRig);jetSkids.push(skid);}
+const steel=mat('#b9ccbf',{metalness:.42,roughness:.4}),exoGlow=mat('#c4df9d',{emissive:'#80ac63',emissiveIntensity:.35});
+const exoParts=[],exoBack=new THREE.Group();bodyPivot.add(exoBack);exoParts.push(exoBack);
+box(.13,.78,.16,steel,0,1.25,.32,exoBack);box(.19,.25,.10,exoGlow,0,1.35,.43,exoBack);
+for(const side of [-1,1]){box(.10,.6,.10,steel,side*.27,1.23,.17,exoBack);box(.18,.10,.37,steel,side*.28,1.49,0,exoBack);}
+for(const leg of legs){
+  const thigh=new THREE.Group();leg.hip.add(thigh);exoParts.push(thigh);box(.10,.37,.14,steel,leg.side*.11,-.18,.025,thigh);sphere(.10,exoGlow,leg.side*.11,-.37,.025,thigh);
+  const shin=new THREE.Group();leg.knee.add(shin);exoParts.push(shin);box(.10,.29,.12,steel,leg.side*.10,-.18,.02,shin);box(.22,.055,.35,steel,0,-.45,-.055,shin);
+}
+function applyToolVisuals(){surfRig.visible=player.tool==='surfboard';jetRig.visible=player.tool==='jetski';for(const p of exoParts)p.visible=player.tool==='exoskeleton';}
+
 // Reusable rings and grains leave a trail without allocating objects each frame.
 const particleCount=80,particles=Array.from({length:particleCount},()=>({life:0}));let particleCursor=0,particleTimer=0;
 const ringMaterial=new THREE.MeshBasicMaterial({color:'#d2fff0',transparent:true,opacity:.32,depthWrite:false,side:THREE.DoubleSide});
@@ -291,6 +314,7 @@ const env={weather:'sunny',windAngle:Math.PI/4,reversed:false,time:0};
 let weatherBlend=0,started=false,paused=false,overview=false,cameraYaw=.15,cameraPitch=.36,cameraDistance=12.7;
 let visibleYaw=0,walkTime=0,jumpQueued=false,sprintToggle=false,touchX=0,touchZ=0;
 const keys=new Set(),discovered=new Set();let comboCandidate=null,comboDwell=0,toastTimer=0,hudTime=0,lastSurface=false;
+const terrainTracker=makeTerrainTracker(terrainClass(player.x,player.z));
 let currentInput={x:0,z:0,sprint:false,jump:false};
 const speedHistory=Array(28).fill(0),hudLog=[];
 
@@ -298,7 +322,7 @@ function start(){if(started)return;started=true;$('intro').classList.add('dismis
 function toast(text){$('toast').textContent=text;$('toast').classList.add('visible');toastTimer=3;}
 function resetKeys(){keys.clear();touchX=0;touchZ=0;jumpQueued=false;sprintToggle=false;$('touchSprint').setAttribute('aria-pressed','false');$('joystickKnob').style.transform='';}
 function teleport(zone){
-  start();const p=ZONES[zone];player=makePlayer(zone);player.facing=p.yaw;visibleYaw=p.yaw;cameraYaw=p.yaw;
+  start();const p=ZONES[zone],tool=player.tool;player=makePlayer(zone);player.tool=tool;applyToolVisuals();player.facing=p.yaw;visibleYaw=p.yaw;cameraYaw=p.yaw;
   for(const p of particles)p.life=0;resetKeys();comboCandidate=null;comboDwell=0;
   document.querySelectorAll('[data-zone]').forEach(b=>b.classList.toggle('selected',b.dataset.zone===zone));
   toast(`已抵達 ${p.label} · 隨時轉向，比較風與水流`);canvas.focus({preventScroll:true});
@@ -319,6 +343,20 @@ if(innerWidth<=600){$('environment').classList.add('closed');$('environmentToggl
 $('overviewButton').onclick=()=>{overview=!overview;document.body.classList.toggle('overview',overview);$('overviewButton').setAttribute('aria-pressed',String(overview));$('overviewButton').innerHTML=overview?'回到第三人稱 <span>↙</span>':'俯瞰全島 <span>↗</span>';toast(overview?'俯瞰全島 · 移動仍可控制角色':'回到第三人稱視角');canvas.focus({preventScroll:true});};
 function openDialog(id){paused=true;resetKeys();$(id).showModal();}
 function closeDialog(id){$(id).close();paused=false;canvas.focus({preventScroll:true});}
+function openEquipment(automatic=false){
+  const terrain=terrainClass(player.x,player.z),recommended=recommendedTool(terrain,player.x,player.z);
+  $('equipmentTitle').textContent=automatic?(terrain==='water'?'踏上水面，換個跑法？':terrain==='obstacle'?'前方有障礙，借點助力？':'回到沙灘，選個新節奏？'):'這一段路，想怎麼走？';
+  $('equipmentContext').textContent=(terrain==='water'?'水面':terrain==='obstacle'?'障礙區':'沙灘')+' · 裝備會自動適應沙灘與水面，換地形也能繼續使用。';
+  document.querySelectorAll('[data-tool]').forEach(b=>{b.classList.toggle('equipped',b.dataset.tool===player.tool);b.setAttribute('aria-pressed',String(b.dataset.tool===player.tool));const tag=b.querySelector('.recommend-tag');if(tag){tag.hidden=b.dataset.tool!==recommended;}});
+  $('keepTool').textContent=`繼續使用${TOOLS[player.tool].name}`;
+  terrainTracker.lastPrompt=env.time;openDialog('equipmentDialog');
+}
+function chooseTool(id){
+  if(!TOOLS[id])return;player.tool=id;applyToolVisuals();closeDialog('equipmentDialog');start();
+  toast(id==='foot'?'已切換徒步 · 隨時按 E 選擇工具':`已裝備${TOOLS[id].name} · 沙灘與水面都會自動增速`);
+}
+$('toolButton').onclick=()=>openEquipment();$('equipmentStatus').onclick=()=>openEquipment();$('keepTool').onclick=()=>closeDialog('equipmentDialog');
+document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>chooseTool(b.dataset.tool));
 $('helpButton').onclick=()=>openDialog('helpDialog');$('discoveryButton').onclick=()=>{renderCombos();openDialog('discoveryDialog');};
 $('pauseButton').onclick=()=>openDialog('pauseDialog');$('resumeButton').onclick=()=>closeDialog('pauseDialog');
 $('resetButton').onclick=()=>{closeDialog('pauseDialog');teleport('beach');};
@@ -327,6 +365,7 @@ document.querySelectorAll('dialog').forEach(d=>{d.addEventListener('cancel',()=>
 window.addEventListener('keydown',e=>{
   if(e.code==='Escape'){if(!document.querySelector('dialog[open]')){e.preventDefault();openDialog('pauseDialog');}return;}
   if(paused)return;
+  if(e.code==='KeyE'&&!e.repeat){e.preventDefault();openEquipment();return;}
   if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','ShiftLeft','ShiftRight'].includes(e.code)){e.preventDefault();keys.add(e.code);start();}
   if(e.code==='Space'&&!e.repeat)jumpQueued=true;
   if(e.code==='KeyR'&&!e.repeat)teleport('beach');
@@ -350,18 +389,20 @@ function directionName(angle){return names[((Math.round(angle/(Math.PI/4))%8)+8)
 function signedEffect(id,value,active=true){const el=$(id);el.textContent=active?(value>=0?'+':'')+value.toFixed(1):'—';el.classList.toggle('positive',active&&value>.05);el.classList.toggle('negative',active&&value<-.05);}
 function locationName(p){if(p.x>44)return '東側急流水道';if(p.z< -26)return '北岸風廊';if(p.water&&p.x>0&&p.x<36&&Math.abs(p.z+3)<15)return '透光潟湖';if(p.water)return '環島淺海';if(p.x>13&&p.z>7)return '漂流木障礙區';if(p.x< -16&&p.z<13)return '棕櫚綠洲';return '南岸沙灘';}
 function updateHUD(){
-  $('speed').textContent=player.speed.toFixed(1);$('speedBar').style.width=`${Math.min(100,player.speed/16*100)}%`;
+  $('speed').textContent=player.speed.toFixed(1);$('speedBar').style.width=`${Math.min(100,player.speed/24*100)}%`;
   $('baseEffect').textContent=player.base.toFixed(1);signedEffect('windEffect',player.windEffect,currentInput.x!==0||currentInput.z!==0);signedEffect('currentEffect',player.currentEffect,player.water&&(currentInput.x!==0||currentInput.z!==0)&&player.grounded);
   const edge=boundaryWeight(player.x,player.z).q>.86;$('edgeNotice').hidden=!edge;
   $('runningState').textContent=edge?'邊界減速':!player.grounded?'躍起中':player.collision?'繞行 / 跳躍':player.speed<.2?'準備出發':currentInput.sprint?'衝刺中':'自在跑動';
-  $('paceLabel').textContent=(player.water?'水面':'沙灘')+(currentInput.sprint?'衝刺':'跑動');$('surfaceName').textContent=player.water?'水面':'沙灘';$('locationName').textContent=locationName(player);
+  $('paceLabel').textContent=(player.water?'水面':'沙灘')+(currentInput.sprint?'衝刺':TOOLS[player.tool].verb);$('surfaceName').textContent=player.water?'水面':'沙灘';$('locationName').textContent=locationName(player);
+  $('equipmentName').textContent=TOOLS[player.tool].name;$('equipmentBonus').textContent=player.tool==='foot'?'選擇工具 ↗':`基速 +${player.toolBonus.toFixed(1)} ↗`;$('baseLabel').textContent=player.tool==='foot'?'地形基速':'工具基速';
+  $('toolButton').classList.toggle('tool-active',player.tool!=='foot');$('toolButton').setAttribute('aria-label',`選擇移動工具，目前${TOOLS[player.tool].name}`);
   const w=windAt(env.weather,env.windAngle,env.time),c=currentAt(player.x,player.z,env.reversed);
   $('windSpeed').textContent=w.strength.toFixed(1);$('windDirection').textContent=directionName(env.windAngle);$('windDial').querySelector('svg').style.transform=`rotate(${env.windAngle*180/Math.PI}deg)`;
   $('currentSpeed').textContent=c.strength.toFixed(1);$('currentName').textContent=player.water?c.name:'近岸水流';$('currentDial').querySelector('svg').style.transform=`rotate(${Math.atan2(c.x,-c.z)*180/Math.PI}deg)`;
-  speedHistory.shift();speedHistory.push(player.speed);$('speedPath').setAttribute('d',speedHistory.map((s,i)=>`${i?'L':'M'}${(i/(speedHistory.length-1)*90).toFixed(1)} ${(33-Math.min(s/16,1)*29).toFixed(1)}`).join(''));
+  speedHistory.shift();speedHistory.push(player.speed);$('speedPath').setAttribute('d',speedHistory.map((s,i)=>`${i?'L':'M'}${(i/(speedHistory.length-1)*90).toFixed(1)} ${(33-Math.min(s/24,1)*29).toFixed(1)}`).join(''));
   if(lastSurface!==player.water&&started){toast(player.water?'踏上水面 · 水流現在會影響跑動速度':'回到沙灘 · 感受風的推力');lastSurface=player.water;}
   $('comboCount').textContent=discovered.size;
-  canvas.dataset.diagnostics=JSON.stringify({x:+player.x.toFixed(3),z:+player.z.toFixed(3),y:+player.y.toFixed(3),speed:+player.speed.toFixed(2),grounded:player.grounded,collision:player.collision,surface:player.water?'water':'sand',weather:env.weather,reversed:env.reversed,combos:discovered.size,paused,overview,boundary:+boundaryWeight(player.x,player.z).q.toFixed(4),fps:Math.round(1000/frameMean),calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
+  canvas.dataset.diagnostics=JSON.stringify({version:'1.1.0',x:+player.x.toFixed(3),z:+player.z.toFixed(3),y:+player.y.toFixed(3),speed:+player.speed.toFixed(2),grounded:player.grounded,collision:player.collision,surface:player.water?'water':'sand',terrain:terrainClass(player.x,player.z),tool:player.tool,base:player.base,weather:env.weather,reversed:env.reversed,combos:discovered.size,paused,overview,boundary:+boundaryWeight(player.x,player.z).q.toFixed(4),fps:Math.round(1000/frameMean),calls:renderer.info.render.calls,triangles:renderer.info.render.triangles});
   drawMap();
 }
 const windRelations=[['with','順風'],['cross','側風'],['against','逆風']],currentRelations=[['with','順流'],['cross','側流'],['against','逆流']];
@@ -406,6 +447,16 @@ function animateAvatar(dt){
   bodyPivot.position.y=air?0:Math.abs(Math.sin(walkTime))*moving*.065;bodyPivot.rotation.x=air?-.1:-moving*.075;
   for(const arm of arms){const phase=arm.side;arm.shoulder.rotation.x=air?-1.0:stride*.65*moving*phase;arm.shoulder.rotation.z=-arm.side*(.07+(air?.18:0));arm.elbow.rotation.x=-.55-(currentInput.sprint?.3:0);}
   for(const leg of legs){const s=stride*leg.side;leg.hip.rotation.x=air?(leg.side<0?-.7:.5):s*.75*moving;leg.knee.rotation.x=air?.8:Math.max(0,-s)*1.12*moving;}
+  if(player.tool==='surfboard'){
+    bodyPivot.position.y=.16+(air?0:Math.sin(env.time*2)*.02);bodyPivot.rotation.x=-.09;
+    for(const leg of legs){leg.hip.rotation.x=-.2;leg.knee.rotation.x=.35;}
+    for(const arm of arms){arm.shoulder.rotation.x=.15;arm.shoulder.rotation.z=-arm.side*(.28+moving*.13);arm.elbow.rotation.x=-.35;}
+  }else if(player.tool==='jetski'){
+    bodyPivot.position.y=.10;bodyPivot.rotation.x=-.16;
+    for(const leg of legs){leg.hip.rotation.x=-.8;leg.knee.rotation.x=1.4;}
+    for(const arm of arms){arm.shoulder.rotation.x=.95;arm.shoulder.rotation.z=-arm.side*.08;arm.elbow.rotation.x=-.6;}
+    for(const skid of jetSkids)skid.visible=!player.water;
+  }
   contactShadow.position.set(player.x,Math.max(.105,terrainHeight(player.x,player.z)+.025),player.z);contactShadow.scale.setScalar(1+Math.max(0,player.y-floorAt(player.x,player.z))*.25);contactShadow.material.opacity=player.water?.12:.17;
   particleTimer+=dt;if(player.speed>1.4&&player.grounded&&particleTimer>.105){emitParticle(player);particleTimer=0;}updateParticles(dt);
 }
@@ -435,6 +486,8 @@ function frame(now){
     boat.position.y=.25+Math.sin(env.time*.9)*.09;boat.rotation.z=Math.sin(env.time*.8)*(.025+weatherBlend*.025);
     animateAvatar(dt);
     if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').classList.remove('visible');}
+    const transition=advanceTerrainTracker(terrainTracker,terrainClass(player.x,player.z),dt,env.time,$('terrainPrompts').checked,started&&player.grounded&&!document.querySelector('dialog[open]'));
+    if(transition)openEquipment(true);
   }
   updateCamera(dt);hudTime+=dt;if(hudTime>.1){updateHUD();hudTime=0;}
   renderer.render(scene,camera);
@@ -443,10 +496,10 @@ function frame(now){
 }
 window.addEventListener('resize',()=>{camera.aspect=canvas.clientWidth/canvas.clientHeight;camera.updateProjectionMatrix();renderer.setSize(canvas.clientWidth,canvas.clientHeight,false);});
 canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();paused=true;toast('3D 畫面暫停，請重新整理以回到小島。');});
-animateAvatar(0);updateHUD();updateCamera(.1);requestAnimationFrame(frame);
+applyToolVisuals();animateAvatar(0);updateHUD();updateCamera(.1);requestAnimationFrame(frame);
 
 // Read-only diagnostics for meaningful verification. No test action is enabled on the Site.
 window.sunshore=Object.freeze({
   snapshot:()=>({position:{x:player.x,y:player.y,z:player.z},speed:player.speed,surface:player.water?'water':'sand',grounded:player.grounded,collision:player.collision,weather:env.weather,windAngle:env.windAngle,reversed:env.reversed,boundary:boundaryWeight(player.x,player.z),combos:discovered.size,paused,overview,render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,pixelRatio:renderer.getPixelRatio()},fpsEstimate:Math.round(1000/frameMean)}),
-  version:'1.0.0'
+  version:'1.1.0'
 });
